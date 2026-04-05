@@ -1,9 +1,36 @@
+# ── Core ML ────────────────────────────────────────────────────────
 pandas
 numpy
 scikit-learn
 xgboost
 imbalanced-learn
-flask
 joblib
 matplotlib
 seaborn
+shap
+
+# ── Web Framework ──────────────────────────────────────────────────
+flask
+flask-cors
+
+# ── Database & Auth ────────────────────────────────────────────────
+flask-sqlalchemy
+flask-migrate
+psycopg2-binary
+flask-jwt-extended
+bcrypt
+
+# ── API Features ───────────────────────────────────────────────────
+flask-limiter
+flasgger
+flask-mail
+
+# ── Production Server ──────────────────────────────────────────────
+gunicorn
+
+# ── Environment & Utilities ────────────────────────────────────────
+python-dotenv
+
+# ── Testing ────────────────────────────────────────────────────────
+pytest
+pytest-flask

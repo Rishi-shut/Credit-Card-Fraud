@@ -37,10 +37,10 @@ ENV/
 # Jupyter Notebook
 .ipynb_checkpoints/
 
-# Results & Models
-models/*.pkl
+# Results (charts — can be regenerated, not needed for deployment)
 results/*.png
 results/*.jpg
+# NOTE: models/*.pkl is intentionally tracked — needed for Render deployment
 
 # Dataset (large file - uncomment if you want to include)
 creditcard.csv
@@ -52,3 +52,6 @@ creditcard.csv
 
 # Logs
 *.log
+
+#docs
+/docs

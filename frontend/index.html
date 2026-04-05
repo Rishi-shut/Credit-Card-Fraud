@@ -1,16 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FraudGuard — Credit Card Fraud Detection System</title>
-  <meta name="description" content="AI-powered credit card fraud detection dashboard. Real-time transaction analysis, model performance, and visualization suite." />
+  <meta name="description" content="AI-powered credit card fraud detection. Real-time analysis, SHAP explainability, prediction history, and batch CSV processing." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/frontend/styles.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>" />
 </head>
 <body>
 
-<!-- Decorative background -->
+<!-- Background -->
 <div class="bg-grid"></div>
 <div class="bg-orb bg-orb-1"></div>
 <div class="bg-orb bg-orb-2"></div>
@@ -23,93 +25,127 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════ NAVBAR ═══════════════════════════ -->
+<!-- Auth Modal -->
+<div class="modal-overlay" id="authModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeAuthModal()">✕</button>
+    <div class="modal-tabs">
+      <button class="modal-tab active" id="tabLogin" onclick="switchTab('login')">Login</button>
+      <button class="modal-tab" id="tabRegister" onclick="switchTab('register')">Sign Up</button>
+    </div>
+
+    <!-- Login Form -->
+    <div id="loginForm">
+      <h2 class="modal-title">Welcome Back</h2>
+      <p class="modal-subtitle">Login to track your predictions and alerts.</p>
+      <div class="form-group mt-16">
+        <label class="form-label" for="loginEmail">Email</label>
+        <input class="form-input" type="email" id="loginEmail" placeholder="you@example.com" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="loginPassword">Password</label>
+        <input class="form-input" type="password" id="loginPassword" placeholder="Your password" />
+      </div>
+      <div class="auth-error" id="loginError"></div>
+      <button class="btn btn-primary btn-full mt-16" id="loginBtn" onclick="doLogin()">🔐 Login</button>
+    </div>
+
+    <!-- Register Form -->
+    <div id="registerForm" style="display:none">
+      <h2 class="modal-title">Create Account</h2>
+      <p class="modal-subtitle">Sign up to save prediction history and receive fraud alerts.</p>
+      <div class="form-group mt-16">
+        <label class="form-label" for="regEmail">Email</label>
+        <input class="form-input" type="email" id="regEmail" placeholder="you@example.com" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="regPassword">Password</label>
+        <input class="form-input" type="password" id="regPassword" placeholder="Min 8 characters" />
+      </div>
+      <div class="auth-error" id="registerError"></div>
+      <button class="btn btn-primary btn-full mt-16" id="registerBtn" onclick="doRegister()">🚀 Create Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ NAVBAR ═══════════════ -->
 <nav class="navbar">
-  <div class="container">
-    <a class="nav-brand" href="#">
-      <div class="logo-icon">🔐</div>
-      <span>FraudGuard</span>
-    </a>
+  <div class="container nav-inner">
+    <a class="nav-brand" href="#"><div class="logo-icon">🔐</div><span>FraudGuard</span></a>
     <ul class="nav-links">
-      <li><a href="#checker">Live Check</a></li>
-      <li><a href="#models">Models</a></li>
-      <li><a href="#gallery">Charts</a></li>
-      <li><a href="#batch">Batch</a></li>
-      <li><a href="#insights">Insights</a></li>
+      <li><a href="#checker">Detection Suite</a></li>
+      <li><a href="#models">Benchmarks</a></li>
+      <li><a href="#gallery">Analytics</a></li>
+      <li><a href="#history" id="historyNavLink" style="display:none">History</a></li>
+      <li><a href="/apidocs" target="_blank">Developers</a></li>
     </ul>
-    <div class="api-status-badge" id="apiStatusBadge">
-      <div class="status-dot" id="statusDot"></div>
-      <span id="statusText">Checking API…</span>
+    <div class="nav-right">
+      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle dark/light mode">🌙</button>
+      <div class="api-status-badge" id="apiStatusBadge">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Checking…</span>
+      </div>
+      <!-- Auth buttons -->
+      <div id="authArea">
+        <button class="btn btn-outline btn-sm" onclick="openAuthModal()">Login / Sign Up</button>
+      </div>
+      <div id="userArea" style="display:none">
+        <div class="user-area-wrapper">
+          <div class="user-avatar" id="userAvatar">U</div>
+          <button class="btn btn-outline btn-sm" onclick="doLogout()">Logout</button>
+        </div>
+      </div>
     </div>
   </div>
 </nav>
 
-<!-- ═══════════════════════════ HERO ═══════════════════════════ -->
 <main>
+<!-- ═══════════════ HERO ═══════════════ -->
 <section class="hero">
   <div class="container">
     <div class="hero-badge">🛡️&nbsp; ML-Powered Fraud Detection System</div>
-    <h1 class="hero-title">
-      Stop <span class="highlight-red">Fraud</span> Before It<br>
-      <span class="highlight">Happens</span>
-    </h1>
-    <p class="hero-subtitle">
-      Real-time transaction analysis with XGBoost, Random Forest, and Logistic Regression —
-      trained on 284,807 transactions with 97.8% ROC-AUC.
-    </p>
+    <h1 class="hero-title">Stop <span class="highlight-red">Fraud</span> Before It<br><span class="highlight">Happens</span></h1>
+    <p class="hero-subtitle">Real-time transaction analysis with XGBoost, Random Forest & Logistic Regression — trained on 284,807 transactions with 97.8% ROC-AUC.</p>
     <div class="hero-cta">
       <a href="#checker" class="btn btn-primary">⚡ Analyze Transaction</a>
       <a href="#models" class="btn btn-outline">📊 View Models</a>
+      <a href="/apidocs" target="_blank" class="btn btn-outline">📖 API Docs</a>
     </div>
   </div>
 </section>
 
-<!-- ═══════════════════════════ STATS BAR ═══════════════════════════ -->
+<!-- ═══════════════ STATS BAR ═══════════════ -->
 <section class="stats-bar">
   <div class="container">
     <div class="stats-grid">
-      <div class="card stat-card blue reveal">
-        <div class="stat-icon">📋</div>
-        <div class="stat-value" data-count="284807" data-suffix="">0</div>
-        <div class="stat-label">Total Transactions</div>
-      </div>
-      <div class="card stat-card red reveal">
-        <div class="stat-icon">⚠️</div>
-        <div class="stat-value" data-count="492" data-suffix="">0</div>
-        <div class="stat-label">Fraud Cases</div>
-      </div>
-      <div class="card stat-card green reveal">
-        <div class="stat-icon">🤖</div>
-        <div class="stat-value" data-count="3" data-suffix="">0</div>
-        <div class="stat-label">Models Trained</div>
-      </div>
-      <div class="card stat-card gold reveal">
-        <div class="stat-icon">🎯</div>
-        <div class="stat-value" data-count="97.8" data-suffix="%" data-decimals="1">0</div>
-        <div class="stat-label">Best ROC-AUC</div>
-      </div>
+      <div class="card stat-card blue reveal"><div class="stat-icon">📋</div><div class="stat-value" data-count="284807">0</div><div class="stat-label">Total Transactions</div></div>
+      <div class="card stat-card red reveal"><div class="stat-icon">⚠️</div><div class="stat-value" data-count="492">0</div><div class="stat-label">Fraud Cases</div></div>
+      <div class="card stat-card green reveal"><div class="stat-icon">🤖</div><div class="stat-value" data-count="3">0</div><div class="stat-label">Models Trained</div></div>
+      <div class="card stat-card gold reveal"><div class="stat-icon">🎯</div><div class="stat-value" data-count="97.8" data-suffix="%" data-decimals="1">0</div><div class="stat-label">Best ROC-AUC</div></div>
     </div>
   </div>
 </section>
 
-<!-- ═══════════════════════════ TRANSACTION CHECKER ═══════════════════════════ -->
+<!-- ═══════════════ TRANSACTION CHECKER ═══════════════ -->
 <section id="checker">
   <div class="container">
     <div class="section-header reveal">
       <div class="section-tag">🔍 Live Detection</div>
       <h2 class="section-title">Transaction Fraud Analyzer</h2>
-      <p class="section-subtitle">Input transaction features and get an instant AI-powered fraud assessment.</p>
+      <p class="section-subtitle">Input transaction features and get an instant AI-powered fraud assessment with SHAP explanation.</p>
     </div>
 
-    <div class="checker-grid">
+    <div class="checker-grid auth-required">
+      <!-- LOCKED OVERLAY -->
+      <div class="locked-overlay"><div class="locked-content"><h2>🔐 Login Required</h2><p>Unlock the Live AI Analyzer by creating a free account.</p><button class="btn btn-primary mt-16" onclick="openAuthModal()">Login / Sign Up</button></div></div>
+      <div class="auth-placeholder" style="display:contents;">
       <!-- INPUT FORM -->
       <div class="card checker-form reveal">
         <h3>Transaction Features</h3>
         <p>Fill in key PCA features and the transaction amount, or use a quick-fill preset.</p>
-
         <div class="quick-fill">
-          <button class="btn btn-danger btn-sm" onclick="loadSample('fraud')">🚨 Load Fraud Sample</button>
-          <button class="btn btn-outline btn-sm" onclick="loadSample('legit')">✅ Load Legit Sample</button>
+          <button class="btn btn-danger btn-sm" onclick="loadSample('fraud')">🚨 Fraud Sample</button>
+          <button class="btn btn-outline btn-sm" onclick="loadSample('legit')">✅ Legit Sample</button>
           <button class="btn btn-outline btn-sm" onclick="clearForm()">🗑 Clear</button>
         </div>
 
@@ -119,7 +155,7 @@
             <input type="range" class="form-range" id="rangeV14" min="-15" max="5" step="0.1" value="0" oninput="syncRange('V14')">
             <div class="range-value" id="valV14">0.00</div>
           </div>
-          <input type="hidden" class="form-input" id="V14" value="0">
+          <input type="hidden" id="V14" value="0">
         </div>
 
         <div class="form-group">
@@ -128,7 +164,7 @@
             <input type="range" class="form-range" id="rangeV10" min="-15" max="5" step="0.1" value="0" oninput="syncRange('V10')">
             <div class="range-value" id="valV10">0.00</div>
           </div>
-          <input type="hidden" class="form-input" id="V10" value="0">
+          <input type="hidden" id="V10" value="0">
         </div>
 
         <div class="form-group">
@@ -137,28 +173,20 @@
             <input type="range" class="form-range" id="rangeV4" min="-5" max="15" step="0.1" value="0" oninput="syncRange('V4')">
             <div class="range-value" id="valV4">0.00</div>
           </div>
-          <input type="hidden" class="form-input" id="V4" value="0">
+          <input type="hidden" id="V4" value="0">
         </div>
 
         <div class="form-grid">
-          <div class="form-group">
-            <label class="form-label" for="V12">V12</label>
-            <input type="number" class="form-input" id="V12" value="0" step="0.01" placeholder="0.00">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="V17">V17</label>
-            <input type="number" class="form-input" id="V17" value="0" step="0.01" placeholder="0.00">
-          </div>
+          <div class="form-group"><label class="form-label" for="V12">V12</label><input type="number" class="form-input" id="V12" value="0" step="0.01"></div>
+          <div class="form-group"><label class="form-label" for="V17">V17</label><input type="number" class="form-input" id="V17" value="0" step="0.01"></div>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="Amount">💰 Transaction Amount ($)</label>
-          <input type="number" class="form-input" id="Amount" value="100" min="0" step="0.01" placeholder="e.g. 150.00">
+          <input type="number" class="form-input" id="Amount" value="100" min="0" step="0.01">
         </div>
 
-        <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:8px;" onclick="runPrediction()" id="predictBtn">
-          ⚡ Analyze Transaction
-        </button>
+        <button class="btn btn-primary btn-full mt-8" onclick="runPrediction()" id="predictBtn">⚡ Analyze Transaction</button>
       </div>
 
       <!-- RESULT PANEL -->
@@ -173,48 +201,30 @@
             <div class="result-icon" id="resultIcon">🔍</div>
             <div class="result-label" id="resultLabel">—</div>
             <div class="prob-gauge mt-8">
-              <div class="prob-labels">
-                <span>Legitimate</span>
-                <span>Fraud Risk</span>
-              </div>
-              <div class="prob-bar-bg">
-                <div class="prob-bar-fill" id="probBarFill" style="width:0%"></div>
-              </div>
-              <div class="prob-labels">
-                <span id="legitPct">—</span>
-                <span id="fraudPct">—</span>
-              </div>
+              <div class="prob-labels"><span>Legitimate</span><span>Fraud Risk</span></div>
+              <div class="prob-bar-bg"><div class="prob-bar-fill" id="probBarFill" style="width:0%"></div></div>
+              <div class="prob-labels"><span id="legitPct">—</span><span id="fraudPct">—</span></div>
             </div>
           </div>
 
           <div class="result-stats-row">
-            <div class="result-stat-box">
-              <div class="result-stat-val" id="statConfidence">—</div>
-              <div class="result-stat-lbl">Confidence</div>
-            </div>
-            <div class="result-stat-box">
-              <div class="result-stat-val" id="statFraudProb">—</div>
-              <div class="result-stat-lbl">Fraud Prob.</div>
-            </div>
+            <div class="result-stat-box"><div class="result-stat-val" id="statConfidence">—</div><div class="result-stat-lbl">Confidence</div></div>
+            <div class="result-stat-box"><div class="result-stat-val" id="statFraudProb">—</div><div class="result-stat-lbl">Fraud Prob.</div></div>
           </div>
 
-          <div class="result-stats-row mt-16">
-            <div class="result-stat-box">
-              <div class="result-stat-val" id="statModel">XGBoost</div>
-              <div class="result-stat-lbl">Model</div>
-            </div>
-            <div class="result-stat-box">
-              <div class="result-stat-val">29</div>
-              <div class="result-stat-lbl">Features Used</div>
-            </div>
+          <!-- SHAP Explanation -->
+          <div class="shap-section" id="shapSection" style="display:none">
+            <div class="shap-title">🧠 Why this verdict? (SHAP)</div>
+            <div class="shap-bars" id="shapBars"></div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ═══════════════════════════ MODEL PERFORMANCE ═══════════════════════════ -->
+<!-- ═══════════════ MODEL PERFORMANCE ═══════════════ -->
 <section id="models">
   <div class="container">
     <div class="section-header reveal">
@@ -222,198 +232,175 @@
       <h2 class="section-title">Model Performance</h2>
       <p class="section-subtitle">Comparing Logistic Regression, Random Forest, and XGBoost on the test set.</p>
     </div>
-
     <div class="models-grid">
-      <!-- Logistic Regression -->
       <div class="card model-card reveal">
-        <div class="model-name">Logistic Regression</div>
-        <div class="model-type">Baseline · Linear Model</div>
-        <div class="metric-row">
-          <span class="metric-name">Precision</span>
-          <div class="metric-bar-wrap"><div class="metric-bar" style="width:5.6%"></div></div>
-          <span class="metric-val">0.056</span>
-        </div>
-        <div class="metric-row">
-          <span class="metric-name">Recall</span>
-          <div class="metric-bar-wrap"><div class="metric-bar" style="width:91.8%"></div></div>
-          <span class="metric-val">0.918</span>
-        </div>
-        <div class="metric-row">
-          <span class="metric-name">F1 Score</span>
-          <div class="metric-bar-wrap"><div class="metric-bar" style="width:10.6%"></div></div>
-          <span class="metric-val">0.106</span>
-        </div>
-        <div class="metric-row">
-          <span class="metric-name">ROC-AUC</span>
-          <div class="metric-bar-wrap"><div class="metric-bar" style="width:97%"></div></div>
-          <span class="metric-val">0.970</span>
-        </div>
+        <div class="model-name">Logistic Regression</div><div class="model-type">Baseline · Linear Model</div>
+        <div class="metric-row"><span class="metric-name">Precision</span><div class="metric-bar-wrap"><div class="metric-bar" style="width:5.6%"></div></div><span class="metric-val">0.056</span></div>
+        <div class="metric-row"><span class="metric-name">Recall</span><div class="metric-bar-wrap"><div class="metric-bar" style="width:91.8%"></div></div><span class="metric-val">0.918</span></div>
+        <div class="metric-row"><span class="metric-name">F1 Score</span><div class="metric-bar-wrap"><div class="metric-bar" style="width:10.6%"></div></div><span class="metric-val">0.106</span></div>
+        <div class="metric-row"><span class="metric-name">ROC-AUC</span><div class="metric-bar-wrap"><div class="metric-bar" style="width:97%"></div></div><span class="metric-val">0.970</span></div>
       </div>
-
-      <!-- Random Forest -->
       <div class="card model-card best-model reveal">
         <div class="best-badge">⭐ Best F1</div>
-        <div class="model-name">Random Forest</div>
-        <div class="model-type">Ensemble · 100 Trees</div>
-        <div class="metric-row">
-          <span class="metric-name">Precision</span>
-          <div class="metric-bar-wrap"><div class="metric-bar" style="width:42.4%"></div></div>
-          <span class="metric-val">0.424</span>
-        </div>
-        <div class="metric-row">
-          <span class="metric-name">Recall</span>
-          <div class="metric-bar-wrap"><div class="metric-bar" style="width:85.7%"></div></div>
-          <span class="metric-val">0.857</span>
-        </div>
-        <div class="metric-row">
-          <span class="metric-name">F1 Score</span>
-          <div class="metric-bar-wrap"><div class="metric-bar" style="width:56.8%"></div></div>
-          <span class="metric-val">0.568</span>
-        </div>
-        <div class="metric-row">
-          <span class="metric-name">ROC-AUC</span>
-          <div class="metric-bar-wrap"><div class="metric-bar" style="width:97.8%"></div></div>
-          <span class="metric-val text-gold">0.978</span>
-        </div>
+        <div class="model-name">Random Forest</div><div class="model-type">Ensemble · 100 Trees</div>
+        <div class="metric-row"><span class="metric-name">Precision</span><div class="metric-bar-wrap"><div class="metric-bar" style="width:42.4%"></div></div><span class="metric-val">0.424</span></div>
+        <div class="metric-row"><span class="metric-name">Recall</span><div class="metric-bar-wrap"><div class="metric-bar" style="width:85.7%"></div></div><span class="metric-val">0.857</span></div>
+        <div class="metric-row"><span class="metric-name">F1 Score</span><div class="metric-bar-wrap"><div class="metric-bar" style="width:56.8%"></div></div><span class="metric-val">0.568</span></div>
+        <div class="metric-row"><span class="metric-name">ROC-AUC</span><div class="metric-bar-wrap"><div class="metric-bar" style="width:97.8%"></div></div><span class="metric-val text-gold">0.978</span></div>
       </div>
-
-      <!-- XGBoost -->
       <div class="card model-card reveal">
-        <div class="model-name">XGBoost</div>
-        <div class="model-type">Gradient Boost · Active Model</div>
-        <div class="metric-row">
-          <span class="metric-name">Precision</span>
-          <div class="metric-bar-wrap"><div class="metric-bar" style="width:33.2%"></div></div>
-          <span class="metric-val">0.332</span>
-        </div>
-        <div class="metric-row">
-          <span class="metric-name">Recall</span>
-          <div class="metric-bar-wrap"><div class="metric-bar" style="width:89.8%"></div></div>
-          <span class="metric-val">0.898</span>
-        </div>
-        <div class="metric-row">
-          <span class="metric-name">F1 Score</span>
-          <div class="metric-bar-wrap"><div class="metric-bar" style="width:48.5%"></div></div>
-          <span class="metric-val">0.485</span>
-        </div>
-        <div class="metric-row">
-          <span class="metric-name">ROC-AUC</span>
-          <div class="metric-bar-wrap"><div class="metric-bar" style="width:97.6%"></div></div>
-          <span class="metric-val">0.976</span>
-        </div>
+        <div class="model-name">XGBoost</div><div class="model-type">Gradient Boost · Active Model</div>
+        <div class="metric-row"><span class="metric-name">Precision</span><div class="metric-bar-wrap"><div class="metric-bar" style="width:33.2%"></div></div><span class="metric-val">0.332</span></div>
+        <div class="metric-row"><span class="metric-name">Recall</span><div class="metric-bar-wrap"><div class="metric-bar" style="width:89.8%"></div></div><span class="metric-val">0.898</span></div>
+        <div class="metric-row"><span class="metric-name">F1 Score</span><div class="metric-bar-wrap"><div class="metric-bar" style="width:48.5%"></div></div><span class="metric-val">0.485</span></div>
+        <div class="metric-row"><span class="metric-name">ROC-AUC</span><div class="metric-bar-wrap"><div class="metric-bar" style="width:97.6%"></div></div><span class="metric-val">0.976</span></div>
       </div>
-    </div>
-
-    <!-- Confusion Matrix callout -->
-    <div class="card reveal" style="padding:28px; text-align:center; background:rgba(0,212,255,0.04); border-color:rgba(0,212,255,0.2);">
-      <p style="font-size:14px; color:var(--text-secondary);">
-        <strong class="text-blue">XGBoost Confusion Matrix:</strong>&nbsp;
-        Caught <strong class="text-green">88 of 98</strong> actual fraud cases · 
-        Only <strong class="text-red">10 missed</strong> · 
-        <strong>177 false alarms</strong> out of 56,962 legitimate transactions
-      </p>
     </div>
   </div>
 </section>
 
-<!-- ═══════════════════════════ GALLERY ═══════════════════════════ -->
+<!-- ═══════════════ GALLERY ═══════════════ -->
 <section id="gallery">
   <div class="container">
-    <div class="section-header reveal">
-      <div class="section-tag">📊 Visualizations</div>
-      <h2 class="section-title">Analysis Charts</h2>
-      <p class="section-subtitle">Generated evaluation plots from model training and testing.</p>
-    </div>
-
-    <div class="gallery-grid" id="galleryGrid">
-      <!-- Injected by JS -->
-    </div>
+    <div class="section-header reveal"><div class="section-tag">📊 Visualizations</div><h2 class="section-title">Analysis Charts</h2></div>
+    <div class="gallery-grid" id="galleryGrid"></div>
   </div>
 </section>
 
-<!-- ═══════════════════════════ BATCH PREDICT ═══════════════════════════ -->
+<!-- ═══════════════ BATCH PREDICT ═══════════════ -->
 <section id="batch">
   <div class="container">
-    <div class="section-header reveal">
-      <div class="section-tag">📋 Batch Mode</div>
-      <h2 class="section-title">Batch Prediction</h2>
-      <p class="section-subtitle">Analyze multiple transactions at once using JSON format.</p>
-    </div>
-
-    <div class="card batch-container reveal">
+    <div class="section-header reveal"><div class="section-tag">📋 Batch Mode</div><h2 class="section-title">Batch Prediction</h2><p class="section-subtitle">Analyze multiple transactions at once using JSON format.</p></div>
+    <div class="card batch-container reveal auth-required">
+      <div class="locked-overlay"><div class="locked-content"><h2>🔐 Login Required</h2><p>Batch JSON predictions are available for registered users.</p><button class="btn btn-primary mt-16" onclick="openAuthModal()">Login / Sign Up</button></div></div>
+      <div class="auth-placeholder">
       <h3>Paste Transaction JSON</h3>
       <p>Each transaction must have a <code class="mono text-blue">features</code> array with exactly 29 values (V1–V28, Amount).</p>
-      <textarea class="batch-textarea" id="batchInput" placeholder='{
-  "transactions": [
-    { "features": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 100] },
-    { "features": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 50] }
-  ]
-}'></textarea>
+      <textarea class="batch-textarea" id="batchInput" placeholder='{"transactions":[{"features":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,100]}]}'></textarea>
       <div class="batch-controls">
         <button class="btn btn-primary" onclick="runBatchPredict()" id="batchBtn">⚡ Run Batch</button>
         <button class="btn btn-outline" onclick="loadBatchSample()">📥 Load Sample</button>
         <button class="btn btn-outline" onclick="clearBatch()">🗑 Clear</button>
       </div>
       <div class="batch-results" id="batchResults"></div>
-    </div>
-  </div>
-</section>
-
-<!-- ═══════════════════════════ FEATURE INSIGHTS ═══════════════════════════ -->
-<section id="insights">
-  <div class="container">
-    <div class="section-header reveal">
-      <div class="section-tag">🧠 Feature Intelligence</div>
-      <h2 class="section-title">Top Fraud Indicators</h2>
-      <p class="section-subtitle">PCA-transformed features ranked by XGBoost importance score.</p>
-    </div>
-
-    <div class="features-grid" id="featuresGrid">
-      <!-- Injected by JS -->
-    </div>
-
-    <!-- PCA explanation -->
-    <div class="card reveal" style="padding:36px; margin-top:32px;">
-      <h3 style="margin-bottom:16px;">🔬 What Are V1–V28?</h3>
-      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:24px;">
-        <div>
-          <div class="section-tag" style="margin-bottom:8px;">Original Data</div>
-          <p class="text-secondary" style="font-size:14px;">Transaction time, amount, merchant type, location, card usage patterns, and more — containing sensitive customer info.</p>
-        </div>
-        <div>
-          <div class="section-tag" style="margin-bottom:8px;">After PCA Transform</div>
-          <p class="text-secondary" style="font-size:14px;">28 uncorrelated principal components (V1–V28) that preserve variance while fully anonymizing personally identifiable data.</p>
-        </div>
-        <div>
-          <div class="section-tag" style="margin-bottom:8px;">Why It Matters</div>
-          <p class="text-secondary" style="font-size:14px;">V14 and V10 alone account for ~59% of the model's fraud detection power — fraud transactions show dramatically different patterns in these components.</p>
-        </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ═══════════════════════════ FOOTER ═══════════════════════════ -->
+<!-- ═══════════════ CSV UPLOAD ═══════════════ -->
+<section id="upload">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-tag">📤 CSV Upload</div>
+      <h2 class="section-title">Batch CSV Predictions</h2>
+      <p class="section-subtitle">Upload a CSV with columns V1–V28 and Amount. Download results with fraud predictions appended. <strong>Login required.</strong></p>
+    </div>
+    <div class="card reveal auth-required">
+      <div class="locked-overlay"><div class="locked-content"><h2>🔐 Login Required</h2><p>Upload large CSV files and get bulk insights.</p><button class="btn btn-primary mt-16" onclick="openAuthModal()">Login / Sign Up</button></div></div>
+      <div class="auth-placeholder">
+      <div class="csv-drop-zone" id="csvDropZone" onclick="document.getElementById('csvFileInput').click()">
+        <div class="csv-drop-icon">📁</div>
+        <div class="csv-drop-text">Drop your CSV here or <span class="text-blue">click to browse</span></div>
+        <div class="csv-drop-sub" id="csvFileName">Columns needed: V1–V28, Amount</div>
+        <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="handleCsvSelect(event)">
+      </div>
+      <div class="csv-actions" id="csvActions" style="display:none">
+        <button class="btn btn-primary" id="csvUploadBtn" onclick="uploadCsv()">⬆️ Analyze & Download Results</button>
+        <button class="btn btn-outline" onclick="clearCsv()">🗑 Clear</button>
+      </div>
+      <div id="csvResult" class="csv-result"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ LIVE FEED ═══════════════ -->
+<section id="livefeed">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-tag">🔴 Live Simulation</div>
+      <h2 class="section-title">Real-Time Transaction Feed</h2>
+      <p class="section-subtitle">Watch the AI analyze simulated transactions in real-time. Fraud alerts flash in red.</p>
+    </div>
+    <div class="card reveal auth-required">
+      <div class="locked-overlay"><div class="locked-content"><h2>🔐 Login Required</h2><p>Watch the model hunt fraudsters in real-time.</p><button class="btn btn-primary mt-16" onclick="openAuthModal()">Login / Sign Up</button></div></div>
+      <div class="auth-placeholder">
+      <div class="livefeed-controls">
+        <button class="btn btn-primary" id="feedStartBtn" onclick="startFeed()">▶️ Start Feed</button>
+        <button class="btn btn-outline" id="feedStopBtn" onclick="stopFeed()" style="display:none">⏹ Stop</button>
+        <span class="feed-counter text-muted" id="feedCounter">0 transactions processed</span>
+      </div>
+      <div class="livefeed-table-wrap">
+        <table class="livefeed-table">
+          <thead><tr><th>#</th><th>Amount</th><th>Verdict</th><th>Fraud Risk</th><th>Confidence</th><th>Time</th></tr></thead>
+          <tbody id="feedBody"></tbody>
+        </table>
+      </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ PREDICTION HISTORY ═══════════════ -->
+<section id="history" style="display:none">
+  <div class="container">
+    <div class="section-header reveal">
+      <div class="section-tag">📜 Your History</div>
+      <h2 class="section-title">Prediction History</h2>
+      <p class="section-subtitle">All your past predictions saved securely in the database.</p>
+    </div>
+    <div class="card reveal">
+      <div class="history-filters" style="display:flex; gap:8px;">
+        <button class="btn btn-sm btn-outline active" onclick="loadHistory('all')"   id="hfAll">All</button>
+        <button class="btn btn-sm btn-outline"         onclick="loadHistory('fraud')" id="hfFraud">🚨 Fraud Only</button>
+        <button class="btn btn-sm btn-outline"         onclick="loadHistory('legitimate')" id="hfLegit">✅ Legit Only</button>
+        <button class="btn btn-sm btn-danger"          onclick="clearHistory()" style="margin-left:auto;">🗑 Clear History</button>
+      </div>
+      <div id="historyContent">
+        <p class="text-muted" style="text-align:center;padding:32px;">Loading history…</p>
+      </div>
+      <div class="history-pagination" id="historyPagination"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ FEATURE INSIGHTS ═══════════════ -->
+<section id="insights">
+  <div class="container">
+    <div class="section-header reveal"><div class="section-tag">🧠 Feature Intelligence</div><h2 class="section-title">Top Fraud Indicators</h2><p class="section-subtitle">PCA-transformed features ranked by XGBoost importance score.</p></div>
+    <div class="features-grid" id="featuresGrid"></div>
+  </div>
+</section>
+
+<!-- ═══════════════ FOOTER ═══════════════ -->
 <footer class="footer">
   <div class="container">
     <div class="footer-content">
-      <div class="footer-brand">🔐 FraudGuard</div>
+      <div class="footer-brand">🔐 FraudGuard v2</div>
       <div class="tech-badges">
-        <span class="tech-badge">Python 3.10+</span>
-        <span class="tech-badge">Flask</span>
-        <span class="tech-badge">XGBoost</span>
-        <span class="tech-badge">Scikit-learn</span>
-        <span class="tech-badge">SMOTE</span>
-        <span class="tech-badge">Pandas</span>
+        <span class="tech-badge">Python 3.10+</span><span class="tech-badge">Flask</span>
+        <span class="tech-badge">XGBoost</span><span class="tech-badge">SHAP</span>
+        <span class="tech-badge">PostgreSQL</span><span class="tech-badge">JWT Auth</span>
       </div>
-      <p class="footer-copy">
-        Dataset: <a href="https://www.kaggle.com/mlg-ulb/creditcardfraud" target="_blank" style="color:var(--accent-blue);">Kaggle Credit Card Fraud</a> ·
-        284,807 transactions · MIT License
-      </p>
+      <p class="footer-copy">Dataset: <a href="https://www.kaggle.com/mlg-ulb/creditcardfraud" target="_blank" style="color:var(--accent-blue)">Kaggle Credit Card Fraud</a> · 284,807 transactions · MIT License</p>
     </div>
   </div>
 </footer>
 </main>
+
+<!-- Confirm Modal -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-box confirm-box">
+    <div class="confirm-icon" id="confirmIcon">🗑️</div>
+    <h2 class="modal-title" id="confirmTitle">Confirm Action</h2>
+    <p class="modal-subtitle" id="confirmMessage">Are you sure you want to proceed?</p>
+    <div class="confirm-actions mt-24">
+      <button class="btn btn-outline btn-full" id="confirmCancel">Cancel</button>
+      <button class="btn btn-danger btn-full" id="confirmOk">Confirm</button>
+    </div>
+  </div>
+</div>
 
 <script src="/frontend/app.js"></script>
 </body>
