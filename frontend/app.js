@@ -15,6 +15,9 @@ let currentUser  = JSON.parse(localStorage.getItem('fg_user') || 'null');
 let feedInterval = null;
 let feedCount    = 0;
 let csvFile      = null;
+let currentModel = 'xgboost';
+
+const featureNames = [...Array.from({length: 28}, (_, i) => `V${i+1}`), 'Amount'];
 
 // ── Sample Data ───────────────────────────────────────────────────
 const SAMPLES = {
@@ -178,14 +181,22 @@ async function checkApiStatus() {
   const dot = document.getElementById('statusDot');
   const txt = document.getElementById('statusText');
   try {
-    const res  = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(4000) });
+    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(4000) });
+    if (res.status === 429) {
+      dot.className = 'status-dot online';
+      txt.textContent = 'System Online (Rate Limited)';
+      return;
+    }
     const data = await res.json();
     if (data.status === 'healthy') {
       dot.className = 'status-dot online';
       txt.textContent = data.model_loaded ? 'System Online' : 'No Model Loaded';
-    } else throw new Error();
-  } catch {
-    dot.className   = 'status-dot offline';
+    } else {
+      dot.className = 'status-dot offline';
+      txt.textContent = 'System Error';
+    }
+  } catch (err) {
+    dot.className = 'status-dot offline';
     txt.textContent = 'System Offline';
   }
 }
@@ -288,24 +299,38 @@ function clearForm() {
   document.getElementById('shapSection').style.display = 'none';
 }
 
+// ── Model Selection ───────────────────────────────────────────────
+function setModel(modelId) {
+  currentModel = modelId;
+  document.querySelectorAll('.model-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.model === modelId);
+  });
+  showToast(`Model switched to ${modelId.replace('_', ' ')}`, 'blue');
+}
+
 // ── Predict ───────────────────────────────────────────────────────
 async function runPrediction() {
   const btn = document.getElementById('predictBtn');
-  btn.disabled = true; btn.innerHTML = '<div class="spinner"></div>&nbsp;Analyzing…';
-
-  const values = {};
-  ['V14','V10','V4','V12','V17'].forEach(id => { values[id] = parseFloat(document.getElementById(id)?.value || 0); });
-  const amount = parseFloat(document.getElementById('Amount').value) || 0;
-
-  const featureArray = [];
-  for (let i = 1; i <= 28; i++) featureArray.push(values[`V${i}`] !== undefined ? values[`V${i}`] : 0);
-  featureArray.push(amount);
+  const resPlaceholder = document.getElementById('resultPlaceholder');
+  const resDisplay = document.getElementById('resultDisplay');
 
   try {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loader-sm"></span> Analyzing...';
+
+    const features = featureNames.map(f => {
+      const el = document.getElementById(f);
+      return el ? parseFloat(el.value) || 0 : 0;
+    });
+    const body = { 
+      features, 
+      model: currentModel 
+    };
+
     const res  = await fetch(`${API_BASE}/predict`, {
       method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ features: featureArray })
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
@@ -684,8 +709,61 @@ document.addEventListener('DOMContentLoaded', () => {
   setupCsvDrop();
   updateAuthUI();
 
+  // Check for developer auth requirement in URL
+  const urlParams = new URL(window.location.href);
+  if (urlParams.searchParams.has('dev_auth_required')) {
+    openDevModal();
+    const err = document.getElementById('devError');
+    if (err) err.textContent = 'Documentation access requires authentication.';
+  }
+
   // Trigger reveal for above-fold elements
   document.querySelectorAll('.reveal').forEach(el => {
     if (el.getBoundingClientRect().top < window.innerHeight) el.classList.add('visible');
   });
 });
+
+// ── Developer Mode ────────────────────────────────────────────────
+function openDevModal() {
+  document.getElementById('devModal').classList.add('open');
+  document.getElementById('devSecretCode').value = '';
+  document.getElementById('devError').textContent = '';
+  document.getElementById('devSecretCode').focus();
+}
+
+function closeDevModal() {
+  document.getElementById('devModal').classList.remove('open');
+}
+
+async function verifyDevCode() {
+  const code = document.getElementById('devSecretCode').value;
+  const err  = document.getElementById('devError');
+  const btn  = document.querySelector('#devModal .btn-primary');
+  
+  try {
+    btn.disabled = true;
+    btn.textContent = 'Verifying...';
+    
+    const res = await fetch(`${API_BASE}/api/verify-dev-access`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+    
+    const data = await res.json();
+    
+    if (res.ok) {
+        showToast('Developer access granted', 'green');
+        closeDevModal();
+        window.open(data.redirect, '_blank');
+    } else {
+        err.textContent = data.error || 'Access denied';
+        document.getElementById('devSecretCode').value = '';
+    }
+  } catch (err) {
+    err.textContent = 'Server connection failed';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Unlock Docs';
+  }
+}

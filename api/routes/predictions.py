@@ -25,14 +25,17 @@ _SCALER  = os.path.join(_BASE, 'models', 'scaler.pkl')
 FEATURE_NAMES = [f'V{i}' for i in range(1, 29)] + ['Amount']
 
 # ── Lazy-load singletons ───────────────────────────────────────────
-_model = _scaler = _explainer = None
+_models    = {}
+_scaler    = None
+_explainers = {}
 
-def get_model():
-    global _model
-    if _model is None:
-        try: _model = joblib.load(_MODEL)
-        except FileNotFoundError: pass
-    return _model
+def get_model(model_id='xgboost'):
+    global _models
+    if model_id not in _models:
+        path = os.path.join(_BASE, 'models', f'{model_id}.pkl')
+        try: _models[model_id] = joblib.load(path)
+        except FileNotFoundError: return None
+    return _models.get(model_id)
 
 def get_scaler():
     global _scaler
@@ -43,21 +46,25 @@ def get_scaler():
             _scaler = StandardScaler()
     return _scaler
 
-def get_explainer():
-    global _explainer
-    if _explainer is None:
+def get_explainer(model, model_id):
+    global _explainers
+    if model_id not in _explainers:
         try:
             import shap
-            m = get_model()
-            if m: _explainer = shap.TreeExplainer(m)
-        except Exception: pass
-    return _explainer
+            if model_id == 'logistic_regression':
+                # Linear model needs different explainer or specific mask
+                _explainers[model_id] = shap.LinearExplainer(model, get_scaler().transform(np.zeros((1, 29))))
+            else:
+                # Tree based models
+                _explainers[model_id] = shap.TreeExplainer(model)
+        except Exception: return None
+    return _explainers.get(model_id)
 
 # ── Core prediction logic ──────────────────────────────────────────
-def make_prediction(features: list) -> dict:
-    model = get_model()
+def make_prediction(features: list, model_id='xgboost') -> dict:
+    model = get_model(model_id)
     if model is None:
-        raise ValueError('Model not loaded. Run python src/main.py first.')
+        raise ValueError(f'Model "{model_id}" not found.')
 
     arr = np.array(features, dtype=float).reshape(1, -1)
     # Scale Amount (last column)
@@ -70,10 +77,13 @@ def make_prediction(features: list) -> dict:
     # SHAP values (best-effort)
     shap_dict = None
     try:
-        exp = get_explainer()
+        exp = get_explainer(model, model_id)
         if exp:
             sv = exp.shap_values(arr)
-            shap_dict = {FEATURE_NAMES[i]: float(sv[0][i]) for i in range(len(FEATURE_NAMES))}
+            # Handle list output for some models
+            if isinstance(sv, list): sv = sv[1] if len(sv) > 1 else sv[0]
+            if len(sv.shape) > 1: sv = sv[0]
+            shap_dict = {FEATURE_NAMES[i]: float(sv[i]) for i in range(len(FEATURE_NAMES))}
     except Exception: pass
 
     return {
@@ -83,6 +93,7 @@ def make_prediction(features: list) -> dict:
         'legitimate_probability': float(proba[0]),
         'confidence':             float(max(proba)),
         'shap_values':            shap_dict,
+        'model_used':             model_id
     }
 
 # ── Helper: optional JWT user ──────────────────────────────────────
@@ -131,7 +142,8 @@ def predict():
         if len(features) != 29:
             return jsonify({'error': f'Expected 29 features, got {len(features)}'}), 400
 
-        result   = make_prediction(features)
+        model_id = data.get('model', 'xgboost')
+        result   = make_prediction(features, model_id)
         user_id  = _optional_user_id()
 
         # Save to DB
@@ -185,12 +197,13 @@ def batch_predict():
         user_id = _optional_user_id()
         results = []
 
+        model_id = data.get('model', 'xgboost')
         for txn in transactions:
             features = txn.get('features', [])
             if len(features) != 29:
                 results.append({'error': f'Expected 29 features, got {len(features)}'}); continue
             try:
-                r = make_prediction(features)
+                r = make_prediction(features, model_id)
                 results.append(r)
                 try:
                     db.session.add(Prediction(
@@ -297,11 +310,12 @@ def predict_csv():
         if len(df) > 10_000:
             return jsonify({'error': 'Max 10,000 rows per CSV'}), 400
 
-        preds = []
+        preds    = []
+        model_id = request.form.get('model', 'xgboost')
         for _, row in df.iterrows():
             features = [float(row.get(f'V{i}', 0)) for i in range(1, 29)] + [float(row.get('Amount', 0))]
             try:
-                r = make_prediction(features)
+                r = make_prediction(features, model_id)
                 preds.append(r)
                 db.session.add(Prediction(
                     user_id=user_id, amount=features[-1],

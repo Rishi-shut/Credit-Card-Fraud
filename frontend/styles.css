@@ -257,9 +257,23 @@ section { padding: 110px 0; }
 .form-range { flex: 1; accent-color: var(--accent-blue); cursor: pointer; }
 .range-value { width: 52px; text-align: center; font-weight: 600; font-size: 13px; color: var(--accent-blue); background: rgba(0,212,255,0.08); border-radius: var(--radius-sm); padding: 4px; }
 
+.model-selector-wrapper { margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.model-select-group    { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+.model-btn             { background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; color: var(--text-muted); cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-weight: 600; font-size: 13px; }
+.model-btn .m-icon     { font-size: 18px; filter: grayscale(1); transition: all 0.3s; }
+.model-btn:hover       { border-color: var(--accent-blue); background: rgba(0, 212, 255, 0.05); color: var(--text-main); }
+.model-btn.active      { border-color: var(--accent-blue); background: rgba(0, 212, 255, 0.1); color: var(--accent-blue); box-shadow: 0 0 20px rgba(0, 212, 255, 0.1); }
+.model-btn.active .m-icon { filter: grayscale(0); transform: scale(1.1); }
+
+[data-theme="light"] .model-btn { background: rgba(0,0,0,0.03); }
+[data-theme="light"] .model-btn.active { background: rgba(0, 102, 255, 0.05); }
+
+/* ── Form Controls ────────────────────────────────────────────────── */
+.form-group-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.quick-fill   { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+
 /* ── Checker Grid ──────────────────────────────────────────────────── */
 .checker-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; }
-.quick-fill   { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
 
 /* ── Result Panel ──────────────────────────────────────────────────── */
 .result-panel       { display: flex; flex-direction: column; }
@@ -370,7 +384,7 @@ section { padding: 110px 0; }
 .livefeed-table tr { transition: background 0.3s; }
 
 /* ── History ───────────────────────────────────────────────────────── */
-#history { padding-top: 20px !important; padding-bottom: 80px; }
+#history { padding: 80px 0; border-top: 1px solid var(--border); }
 .history-filters   { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
 .history-filters .btn.active { border-color: var(--accent-blue); color: var(--accent-blue); }
 .history-table     { width: 100%; border-collapse: collapse; font-size: 13px; }

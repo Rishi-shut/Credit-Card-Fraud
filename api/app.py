@@ -5,7 +5,7 @@ Features: JWT Auth · PostgreSQL/SQLite DB · SHAP · Rate Limiting
           Swagger Docs · Email Alerts · CSV Upload · Batch Predict
 """
 import os
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, send_from_directory, request, session, redirect, url_for
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
@@ -21,9 +21,11 @@ from api.routes.shap_routes import shap_bp
 from api.routes.alerts import alerts_bp
 from api.routes.retrain import retrain_bp
 
-load_dotenv()
-
+# ── Paths ──────────────────────────────────────────────────────────
 BASE_DIR     = os.path.dirname(os.path.dirname(__file__))
+# Check for .env in the /env folder as per project structure
+env_path     = os.path.join(BASE_DIR, 'env', '.env')
+load_dotenv(env_path)
 FRONTEND_DIR = os.path.join(BASE_DIR, 'frontend')
 RESULTS_DIR  = os.path.join(BASE_DIR, 'results')
 MODEL_PATH   = os.path.join(BASE_DIR, 'models', 'xgboost.pkl')
@@ -43,18 +45,28 @@ FEATURE_IMPORTANCE = [
     {"feature": "V12", "importance": 2.7},
 ]
 
+# Temporary tokens for documentation access (bypass session cookie issues)
+DEV_ACCESS_TOKENS = {}
+
 
 def create_app():
     app = Flask(__name__)
 
     # ── Config ────────────────────────────────────────────────────
-    app.config['SECRET_KEY']     = os.getenv('SECRET_KEY', 'dev-secret-CHANGE-ME')
-    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'jwt-secret-CHANGE-ME')
+    app.config['SECRET_KEY']         = os.getenv('SECRET_KEY', 'dev-secret-CHANGE-ME')
+    app.config['JWT_SECRET_KEY']     = os.getenv('JWT_SECRET_KEY', 'jwt-secret-CHANGE-ME')
+    app.config['SESSION_COOKIE_NAME'] = 'fg_session'
+    app.config['SESSION_COOKIE_PATH'] = '/'
 
     # Database — PostgreSQL in production, SQLite locally
     db_url = os.getenv('DATABASE_URL', f'sqlite:///{os.path.join(BASE_DIR, "fraud_detection.db")}')
-    if db_url.startswith('postgres://'):   # Render uses postgres://, SQLAlchemy needs postgresql://
+    # For local dev, we prefer SQLite unless explicitly on Render
+    if os.getenv('FLASK_ENV') == 'development' and not os.getenv('RENDER'):
+        db_url = f'sqlite:///{os.path.join(BASE_DIR, "fraud_detection.db")}'
+        
+    if db_url and db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
+        
     app.config['SQLALCHEMY_DATABASE_URI']        = db_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -72,10 +84,10 @@ def create_app():
     mail.init_app(app)
     JWTManager(app)
 
-    Limiter(
+    limiter = Limiter(
         app=app,
         key_func=get_remote_address,
-        default_limits=["500 per day", "100 per hour"],
+        default_limits=["1000 per day", "200 per hour"],
         storage_uri="memory://"
     )
 
@@ -97,6 +109,41 @@ def create_app():
     app.register_blueprint(shap_bp)
     app.register_blueprint(alerts_bp)
     app.register_blueprint(retrain_bp)
+
+    # ── Custom Security Hooks ───────────────────────────────────
+    @app.before_request
+    def check_dev_access():
+        if request.path.startswith('/apidocs'):
+            # Check for temporary access token in query params
+            token = request.args.get('token')
+            if token and token in DEV_ACCESS_TOKENS:
+                session['dev_auth'] = True
+                # Optional: prevent token reuse by deleting it
+                # del DEV_ACCESS_TOKENS[token]
+                return
+            
+            if not session.get('dev_auth'):
+                return redirect(url_for('frontend') + '?dev_auth_required=1')
+
+    @app.route('/api/verify-dev-access', methods=['POST'])
+    def verify_dev_access():
+        data = request.get_json() or {}
+        code = data.get('code')
+        if not code:
+            return jsonify({'error': 'No secret code provided'}), 400
+        
+        # Compare with SECRET_KEY from .env
+        if code == app.config['SECRET_KEY']:
+            import uuid
+            token = str(uuid.uuid4())
+            DEV_ACCESS_TOKENS[token] = True
+            session['dev_auth'] = True
+            return jsonify({
+                'message': 'Access granted', 
+                'redirect': f'/apidocs?token={token}'
+            })
+        else:
+            return jsonify({'error': 'Invalid secret code'}), 401
 
     # ── Static / Frontend Routes ──────────────────────────────────
     @app.route('/')
@@ -176,6 +223,10 @@ def create_app():
     @app.errorhandler(500)
     def server_error(e):
         return jsonify({'error': 'Internal server error'}), 500
+
+    # Exempt monitoring endpoints from rate limiting
+    limiter.exempt(health)
+    limiter.exempt(stats)
 
     return app
 
