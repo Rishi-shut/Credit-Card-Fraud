@@ -10,15 +10,11 @@ class User(db.Model):
     __tablename__ = 'users'
 
     id            = db.Column(db.Integer, primary_key=True)
+    clerk_id      = db.Column(db.String(128), unique=True, nullable=False, index=True)
     email         = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(256), nullable=False)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     is_admin      = db.Column(db.Boolean, default=False)
 
-    # Alert preferences
-    alert_email      = db.Column(db.String(120), nullable=True)
-    alert_threshold  = db.Column(db.Float, default=0.8)
-    alerts_enabled   = db.Column(db.Boolean, default=True)
 
     predictions = db.relationship(
         'Prediction', backref='user', lazy=True, cascade='all, delete-orphan'
@@ -30,9 +26,6 @@ class User(db.Model):
             'email':            self.email,
             'created_at':       self.created_at.isoformat(),
             'is_admin':         self.is_admin,
-            'alert_email':      self.alert_email or self.email,
-            'alert_threshold':  self.alert_threshold,
-            'alerts_enabled':   self.alerts_enabled,
         }
 
 

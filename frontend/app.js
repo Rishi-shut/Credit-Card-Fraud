@@ -9,9 +9,7 @@ const API_BASE = (
   window.location.hostname === '127.0.0.1'
 ) ? 'http://localhost:5000' : window.location.origin;
 
-// ── State ─────────────────────────────────────────────────────────
-let jwtToken     = localStorage.getItem('fg_token') || null;
-let currentUser  = JSON.parse(localStorage.getItem('fg_user') || 'null');
+let clerkLoaded = false;
 let feedInterval = null;
 let feedCount    = 0;
 let csvFile      = null;
@@ -44,9 +42,12 @@ const FEATURE_INSIGHTS = [
 ];
 
 // ── Auth Headers ─────────────────────────────────────────────────
-function authHeaders() {
+async function authHeaders() {
   const h = { 'Content-Type': 'application/json' };
-  if (jwtToken) h['Authorization'] = `Bearer ${jwtToken}`;
+  if (window.Clerk && window.Clerk.session) {
+    const token = await window.Clerk.session.getToken();
+    if (token) h['Authorization'] = `Bearer ${token}`;
+  }
   return h;
 }
 
@@ -66,82 +67,25 @@ function initTheme() {
   document.getElementById('themeToggle').textContent = saved === 'dark' ? '🌙' : '☀️';
 }
 
-// ── Auth Modal ────────────────────────────────────────────────────
-function openAuthModal()  { document.getElementById('authModal').classList.add('open'); }
-function closeAuthModal() { document.getElementById('authModal').classList.remove('open'); }
-
-function switchTab(tab) {
-  const isLogin = tab === 'login';
-  document.getElementById('loginForm').style.display    = isLogin ? 'block' : 'none';
-  document.getElementById('registerForm').style.display = isLogin ? 'none'  : 'block';
-  document.getElementById('tabLogin').classList.toggle('active', isLogin);
-  document.getElementById('tabRegister').classList.toggle('active', !isLogin);
-}
-
-async function doLogin() {
-  const email    = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  const errEl    = document.getElementById('loginError');
-  const btn      = document.getElementById('loginBtn');
-  errEl.textContent = '';
-
-  if (!email || !password) { errEl.textContent = 'Email and password are required'; return; }
-
-  btn.disabled = true; btn.innerHTML = '<div class="spinner"></div>&nbsp;Logging in…';
-  try {
-    const res  = await fetch(`${API_BASE}/auth/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email, password}) });
-    const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.error || 'Login failed'; return; }
-    saveAuth(data.access_token, data.user);
-    closeAuthModal();
-    showToast(`Welcome back, ${data.user.email.split('@')[0]}! 👋`, 'green');
-    updateAuthUI();
-  } catch { errEl.textContent = 'Network error. Is the API running?'; }
-  finally { btn.disabled = false; btn.innerHTML = '🔐 Login'; }
-}
-
-async function doRegister() {
-  const email    = document.getElementById('regEmail').value.trim();
-  const password = document.getElementById('regPassword').value;
-  const errEl    = document.getElementById('registerError');
-  const btn      = document.getElementById('registerBtn');
-  errEl.textContent = '';
-
-  if (!email || !password) { errEl.textContent = 'Email and password are required'; return; }
-  if (password.length < 8)  { errEl.textContent = 'Password must be at least 8 characters'; return; }
-
-  btn.disabled = true; btn.innerHTML = '<div class="spinner"></div>&nbsp;Creating account…';
-  try {
-    const res  = await fetch(`${API_BASE}/auth/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email, password}) });
-    const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.error || 'Registration failed'; return; }
-    saveAuth(data.access_token, data.user);
-    closeAuthModal();
-    showToast('Account created! Welcome to FraudGuard 🎉', 'green');
-    updateAuthUI();
-  } catch { errEl.textContent = 'Network error. Is the API running?'; }
-  finally { btn.disabled = false; btn.innerHTML = '🚀 Create Account'; }
-}
-
-function doLogout() {
-  jwtToken = null; currentUser = null;
-  localStorage.removeItem('fg_token');
-  localStorage.removeItem('fg_user');
-  updateAuthUI();
-  document.getElementById('history').style.display = 'none';
-  showToast('Logged out successfully', 'green');
-}
-
-function saveAuth(token, user) {
-  jwtToken = token; currentUser = user;
-  localStorage.setItem('fg_token', token);
-  localStorage.setItem('fg_user', JSON.stringify(user));
+// ── Auth Logic (Clerk) ────────────────────────────────────────────
+function openClerkSignIn() {
+  if (window.Clerk) window.Clerk.openSignIn();
 }
 
 function updateAuthUI() {
-  const isLoggedIn = !!jwtToken;
-  document.getElementById('authArea').style.display  = isLoggedIn ? 'none'  : 'block';
-  document.getElementById('userArea').style.display  = isLoggedIn ? 'flex'  : 'none';
+  const isLoggedIn = window.Clerk && !!window.Clerk.user;
+  
+  const loginArea = document.getElementById('clerk-login-area');
+  const userBtnArea = document.getElementById('clerk-user-button');
+  
+  if (loginArea) loginArea.style.display = isLoggedIn ? 'none' : 'block';
+  if (userBtnArea) {
+    userBtnArea.style.display = isLoggedIn ? 'block' : 'none';
+    if (isLoggedIn && !userBtnArea.hasChildNodes()) {
+       window.Clerk.mountUserButton(userBtnArea);
+    }
+  }
+
   document.getElementById('historyNavLink').style.display = isLoggedIn ? 'inline-block' : 'none';
   document.getElementById('history').style.display   = isLoggedIn ? 'block' : 'none';
   
@@ -170,8 +114,8 @@ function updateAuthUI() {
     }
   });
 
-  if (currentUser) {
-    document.getElementById('userAvatar').textContent = currentUser.email[0].toUpperCase();
+  if (window.Clerk && window.Clerk.user) {
+    // Optional: add custom logic for user appearance if needed
   }
   if (isLoggedIn) loadHistory('all');
 }
@@ -329,14 +273,14 @@ async function runPrediction() {
 
     const res  = await fetch(`${API_BASE}/predict`, {
       method: 'POST',
-      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     renderPredictionResult(data);
     if (data.shap_values) renderShap(data.shap_values);
-    if (jwtToken) loadHistory('all');
+    if (window.Clerk && window.Clerk.user) loadHistory('all');
   } catch (err) {
     showToast(`Error: ${err.message}`, 'red');
     renderDemoResult();
@@ -420,7 +364,7 @@ async function runBatchPredict() {
   catch { showToast('Invalid JSON format', 'red'); btn.disabled = false; btn.innerHTML = '⚡ Run Batch'; return; }
 
   try {
-    const res  = await fetch(`${API_BASE}/batch-predict`, { method:'POST', headers:authHeaders(), body:JSON.stringify(payload) });
+    const res  = await fetch(`${API_BASE}/batch-predict`, { method:'POST', headers: await authHeaders(), body:JSON.stringify(payload) });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     renderBatchResults(data.results, payload.transactions);
@@ -466,8 +410,7 @@ function handleCsvSelect(event) {
   csvFile = event.target.files[0];
   if (csvFile) {
     document.getElementById('csvFileName').textContent = `📄 ${csvFile.name} (${(csvFile.size/1024).toFixed(1)} KB)`;
-    document.getElementById('csvActions').style.display = jwtToken ? 'flex' : 'none';
-    document.getElementById('csvLoginNote').style.display = jwtToken ? 'none' : 'block';
+    document.getElementById('csvActions').style.display = (window.Clerk && window.Clerk.user) ? 'flex' : 'none';
   }
 }
 
@@ -480,7 +423,7 @@ function clearCsv() {
 }
 
 async function uploadCsv() {
-  if (!csvFile || !jwtToken) return;
+  if (!csvFile || !window.Clerk || !window.Clerk.user) return;
   const btn = document.getElementById('csvUploadBtn');
   btn.disabled = true; btn.innerHTML = '<div class="spinner"></div>&nbsp;Processing…';
 
@@ -490,7 +433,7 @@ async function uploadCsv() {
   try {
     const res = await fetch(`${API_BASE}/predict/csv`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${jwtToken}` },
+      headers: await authHeaders(),
       body: formData
     });
 
@@ -534,7 +477,7 @@ function startFeed() {
 
     try {
       const res  = await fetch(`${API_BASE}/predict`, {
-        method:'POST', headers:authHeaders(), body:JSON.stringify({features})
+        method:'POST', headers: await authHeaders(), body:JSON.stringify({features})
       });
       const data = await res.json();
       if (!data.error) appendFeedRow(data, features[28], feedCount);
@@ -570,7 +513,7 @@ function appendFeedRow(data, amount, num, demo = false) {
 
 // ── Prediction History ────────────────────────────────────────────
 async function loadHistory(filter = 'all') {
-  if (!jwtToken) return;
+  if (!window.Clerk || !window.Clerk.user) return;
   document.getElementById('historyContent').innerHTML = '<p class="text-muted" style="text-align:center;padding:24px">Loading…</p>';
 
   // Update active filter button
@@ -579,7 +522,7 @@ async function loadHistory(filter = 'all') {
   document.getElementById(btnMap[filter])?.classList.add('active');
 
   try {
-    const res  = await fetch(`${API_BASE}/predict/history?filter=${filter}&per_page=20`, { headers: authHeaders() });
+    const res  = await fetch(`${API_BASE}/predict/history?filter=${filter}&per_page=20`, { headers: await authHeaders() });
     const data = await res.json();
     if (!res.ok) { document.getElementById('historyContent').innerHTML = `<p class="text-muted" style="text-align:center;padding:24px">${data.error}</p>`; return; }
 
@@ -613,7 +556,7 @@ async function loadHistory(filter = 'all') {
 }
 
 async function clearHistory() {
-  if (!jwtToken) return;
+  if (!window.Clerk || !window.Clerk.user) return;
   
   showConfirm(
     'Delete History?',
@@ -622,7 +565,7 @@ async function clearHistory() {
       try {
         const res = await fetch(`${API_BASE}/predict/history`, {
           method: 'DELETE',
-          headers: authHeaders()
+          headers: await authHeaders()
         });
         const data = await res.json();
         if (res.ok) {
@@ -683,8 +626,7 @@ function setupCsvDrop() {
     if (file && file.name.endsWith('.csv')) {
       csvFile = file;
       document.getElementById('csvFileName').textContent = `📄 ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
-      document.getElementById('csvActions').style.display = jwtToken ? 'flex' : 'none';
-      document.getElementById('csvLoginNote').style.display = jwtToken ? 'none' : 'block';
+      document.getElementById('csvActions').style.display = (window.Clerk && window.Clerk.user) ? 'flex' : 'none';
     } else showToast('Please drop a .csv file', 'red');
   });
 }
@@ -693,12 +635,35 @@ function setupCsvDrop() {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     closeLightbox({ target: document.getElementById('lightbox') });
-    closeAuthModal();
+    if (typeof closeAuthModal === 'function') closeAuthModal();
   }
 });
 
 // ── Init ──────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+// ── Initialize Clerk ──────────────────────────────────────────
+  window.addEventListener('load', async function() {
+    if (window.Clerk) {
+      await window.Clerk.load();
+      clerkLoaded = true;
+      updateAuthUI();
+      
+      // Listen for auth state changes
+      window.Clerk.addListener(({ user }) => {
+        updateAuthUI();
+        if (user) loadHistory('all');
+      });
+
+      // Hook up buttons
+      const signinIds = ['clerkSignInBtn', 'lockedOverlaySignIn', 'lockedCsvSignIn', 'lockedFeedSignIn'];
+      signinIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.onclick = openClerkSignIn;
+      });
+    } else {
+      console.error("Clerk could not be found. Check network connection and CDN URL.");
+    }
+  });
+
   initTheme();
   checkApiStatus();
   setInterval(checkApiStatus, 20000);
@@ -707,7 +672,6 @@ document.addEventListener('DOMContentLoaded', () => {
   buildFeatureInsights();
   setupReveal();
   setupCsvDrop();
-  updateAuthUI();
 
   // Check for developer auth requirement in URL
   const urlParams = new URL(window.location.href);
@@ -721,7 +685,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.reveal').forEach(el => {
     if (el.getBoundingClientRect().top < window.innerHeight) el.classList.add('visible');
   });
-});
 
 // ── Developer Mode ────────────────────────────────────────────────
 function openDevModal() {

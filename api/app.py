@@ -7,18 +7,16 @@ Features: JWT Auth · PostgreSQL/SQLite DB · SHAP · Rate Limiting
 import os
 from flask import Flask, jsonify, send_from_directory, request, session, redirect, url_for
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flasgger import Swagger
 from dotenv import load_dotenv
 
 from api.database import db
-from api.utils.email_helper import mail
 from api.auth import auth_bp
 from api.routes.predictions import predictions_bp
 from api.routes.shap_routes import shap_bp
-from api.routes.alerts import alerts_bp
+
 from api.routes.retrain import retrain_bp
 
 # ── Paths ──────────────────────────────────────────────────────────
@@ -54,7 +52,6 @@ def create_app():
 
     # ── Config ────────────────────────────────────────────────────
     app.config['SECRET_KEY']         = os.getenv('SECRET_KEY', 'dev-secret-CHANGE-ME')
-    app.config['JWT_SECRET_KEY']     = os.getenv('JWT_SECRET_KEY', 'jwt-secret-CHANGE-ME')
     app.config['SESSION_COOKIE_NAME'] = 'fg_session'
     app.config['SESSION_COOKIE_PATH'] = '/'
 
@@ -70,19 +67,11 @@ def create_app():
     app.config['SQLALCHEMY_DATABASE_URI']        = db_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-    # Email (Flask-Mail via Gmail SMTP)
-    app.config['MAIL_SERVER']         = 'smtp.gmail.com'
-    app.config['MAIL_PORT']           = 587
-    app.config['MAIL_USE_TLS']        = True
-    app.config['MAIL_USERNAME']       = os.getenv('MAIL_USERNAME', '')
-    app.config['MAIL_PASSWORD']       = os.getenv('MAIL_PASSWORD', '')
-    app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_USERNAME', '')
+    # Email Config Removed
 
     # ── Extensions ────────────────────────────────────────────────
     CORS(app, supports_credentials=True)
     db.init_app(app)
-    mail.init_app(app)
-    JWTManager(app)
 
     limiter = Limiter(
         app=app,
@@ -94,8 +83,8 @@ def create_app():
     Swagger(app, template={
         "info":  {"title": "FraudGuard API", "description": "Credit Card Fraud Detection API v2", "version": "2.0.0"},
         "securityDefinitions": {
-            "Bearer": {"type": "apiKey", "name": "Authorization", "in": "header",
-                       "description": "JWT token. Format: Bearer <token>"}
+            "Clerk": {"type": "apiKey", "name": "Authorization", "in": "header",
+                       "description": "Clerk Session Token. Format: Bearer <token>"}
         }
     })
 
@@ -107,7 +96,6 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(predictions_bp)
     app.register_blueprint(shap_bp)
-    app.register_blueprint(alerts_bp)
     app.register_blueprint(retrain_bp)
 
     # ── Custom Security Hooks ───────────────────────────────────

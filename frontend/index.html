@@ -9,6 +9,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/frontend/styles.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>" />
+  <!-- Clerk SDK -->
+  <script
+    async
+    crossorigin="anonymous"
+    data-clerk-publishable-key="pk_test_cHJvcGVyLW1vbGUtMy5jbGVyay5hY2NvdW50cy5kZXYk"
+    src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+    type="text/javascript"
+  ></script>
+
 </head>
 <body>
 
@@ -25,48 +34,8 @@
   </div>
 </div>
 
-<!-- Auth Modal -->
-<div class="modal-overlay" id="authModal">
-  <div class="modal-box">
-    <button class="modal-close" onclick="closeAuthModal()">✕</button>
-    <div class="modal-tabs">
-      <button class="modal-tab active" id="tabLogin" onclick="switchTab('login')">Login</button>
-      <button class="modal-tab" id="tabRegister" onclick="switchTab('register')">Sign Up</button>
-    </div>
-
-    <!-- Login Form -->
-    <div id="loginForm">
-      <h2 class="modal-title">Welcome Back</h2>
-      <p class="modal-subtitle">Login to track your predictions and alerts.</p>
-      <div class="form-group mt-16">
-        <label class="form-label" for="loginEmail">Email</label>
-        <input class="form-input" type="email" id="loginEmail" placeholder="you@example.com" />
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="loginPassword">Password</label>
-        <input class="form-input" type="password" id="loginPassword" placeholder="Your password" />
-      </div>
-      <div class="auth-error" id="loginError"></div>
-      <button class="btn btn-primary btn-full mt-16" id="loginBtn" onclick="doLogin()">🔐 Login</button>
-    </div>
-
-    <!-- Register Form -->
-    <div id="registerForm" style="display:none">
-      <h2 class="modal-title">Create Account</h2>
-      <p class="modal-subtitle">Sign up to save prediction history and receive fraud alerts.</p>
-      <div class="form-group mt-16">
-        <label class="form-label" for="regEmail">Email</label>
-        <input class="form-input" type="email" id="regEmail" placeholder="you@example.com" />
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="regPassword">Password</label>
-        <input class="form-input" type="password" id="regPassword" placeholder="Min 8 characters" />
-      </div>
-      <div class="auth-error" id="registerError"></div>
-      <button class="btn btn-primary btn-full mt-16" id="registerBtn" onclick="doRegister()">🚀 Create Account</button>
-    </div>
-  </div>
-</div>
+<!-- Auth Modal (Legacy removed) -->
+<div id="clerk-auth-modal" style="display:none"></div>
 
 <!-- ═══════════════ NAVBAR ═══════════════ -->
 <nav class="navbar">
@@ -86,15 +55,11 @@
         <span id="statusText">Checking…</span>
       </div>
       <!-- Auth buttons -->
-      <div id="authArea">
-        <button class="btn btn-outline btn-sm" onclick="openAuthModal()">Login / Sign Up</button>
+      <!-- Clerk Login -->
+      <div id="clerk-login-area">
+        <button class="btn btn-outline btn-sm" id="clerkSignInBtn">Login / Sign Up</button>
       </div>
-      <div id="userArea" style="display:none">
-        <div class="user-area-wrapper">
-          <div class="user-avatar" id="userAvatar">U</div>
-          <button class="btn btn-outline btn-sm" onclick="doLogout()">Logout</button>
-        </div>
-      </div>
+      <div id="clerk-user-button"></div>
     </div>
   </div>
 </nav>
@@ -137,7 +102,7 @@
 
     <div class="checker-grid auth-required">
       <!-- LOCKED OVERLAY -->
-      <div class="locked-overlay"><div class="locked-content"><h2>🔐 Login Required</h2><p>Unlock the Live AI Analyzer by creating a free account.</p><button class="btn btn-primary mt-16" onclick="openAuthModal()">Login / Sign Up</button></div></div>
+      <div class="locked-overlay"><div class="locked-content"><h2>🔐 Login Required</h2><p>Unlock the Live AI Analyzer by creating a free account.</p><button class="btn btn-primary mt-16" id="lockedOverlaySignIn">Login / Sign Up</button></div></div>
       <div class="auth-placeholder" style="display:contents;">
       <!-- INPUT FORM -->
       <div class="card checker-form reveal">
@@ -312,7 +277,7 @@
       <p class="section-subtitle">Upload a CSV with columns V1–V28 and Amount. Download results with fraud predictions appended. <strong>Login required.</strong></p>
     </div>
     <div class="card reveal auth-required">
-      <div class="locked-overlay"><div class="locked-content"><h2>🔐 Login Required</h2><p>Upload large CSV files and get bulk insights.</p><button class="btn btn-primary mt-16" onclick="openAuthModal()">Login / Sign Up</button></div></div>
+      <div class="locked-overlay"><div class="locked-content"><h2>🔐 Login Required</h2><p>Upload large CSV files and get bulk insights.</p><button class="btn btn-primary mt-16" id="lockedCsvSignIn">Login / Sign Up</button></div></div>
       <div class="auth-placeholder">
       <div class="csv-drop-zone" id="csvDropZone" onclick="document.getElementById('csvFileInput').click()">
         <div class="csv-drop-icon">📁</div>
@@ -339,7 +304,7 @@
       <p class="section-subtitle">Watch the AI analyze simulated transactions in real-time. Fraud alerts flash in red.</p>
     </div>
     <div class="card reveal auth-required">
-      <div class="locked-overlay"><div class="locked-content"><h2>🔐 Login Required</h2><p>Watch the model hunt fraudsters in real-time.</p><button class="btn btn-primary mt-16" onclick="openAuthModal()">Login / Sign Up</button></div></div>
+      <div class="locked-overlay"><div class="locked-content"><h2>🔐 Login Required</h2><p>Watch the model hunt fraudsters in real-time.</p><button class="btn btn-primary mt-16" id="lockedFeedSignIn">Login / Sign Up</button></div></div>
       <div class="auth-placeholder">
       <div class="livefeed-controls">
         <button class="btn btn-primary" id="feedStartBtn" onclick="startFeed()">▶️ Start Feed</button>

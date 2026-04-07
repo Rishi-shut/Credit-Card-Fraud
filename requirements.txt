@@ -19,6 +19,7 @@ flask-migrate
 psycopg2-binary
 flask-jwt-extended
 bcrypt
+clerk-backend-api
 
 # ── API Features ───────────────────────────────────────────────────
 flask-limiter

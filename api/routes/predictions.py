@@ -9,11 +9,11 @@ import os, io, json
 import numpy as np
 import pandas as pd
 import joblib
-from flask import Blueprint, request, jsonify, send_file
-from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
+from flask import Blueprint, request, jsonify, send_file, g
+from api.auth import clerk_required
 from api.database import db
 from api.models import Prediction, User
-from api.utils.email_helper import send_fraud_alert
+
 
 predictions_bp = Blueprint('predictions', __name__)
 
@@ -99,11 +99,15 @@ def make_prediction(features: list, model_id='xgboost') -> dict:
 # ── Helper: optional JWT user ──────────────────────────────────────
 def _optional_user_id():
     try:
-        verify_jwt_in_request(optional=True)
-        uid = get_jwt_identity()
-        return int(uid) if uid else None
+        from api.clerk_client import clerk_client
+        request_state = clerk_client.authenticate_request(request)
+        if request_state.is_signed_in:
+            clerk_id = request_state.payload.get('sub')
+            user = User.query.filter_by(clerk_id=clerk_id).first()
+            return user.id if user else None
     except Exception:
-        return None
+        pass
+    return None
 
 # ── Routes ────────────────────────────────────────────────────────
 @predictions_bp.route('/predict', methods=['POST'])
@@ -163,15 +167,6 @@ def predict():
             result['prediction_id'] = p.id
         except Exception: pass
 
-        # Email alert
-        if result['prediction'] == 1 and user_id:
-            try:
-                user = User.query.get(user_id)
-                if user and user.alerts_enabled and result['fraud_probability'] >= user.alert_threshold:
-                    send_fraud_alert(user.alert_email or user.email,
-                                     result['fraud_probability'], features[-1])
-            except Exception: pass
-
         return jsonify(result)
 
     except ValueError as e:
@@ -230,7 +225,7 @@ def batch_predict():
 
 
 @predictions_bp.route('/predict/history', methods=['GET'])
-@jwt_required()
+@clerk_required
 def history():
     """Get prediction history for logged-in user (paginated).
     ---
@@ -243,7 +238,7 @@ def history():
     responses:
       200: {description: Paginated prediction list}
     """
-    user_id  = int(get_jwt_identity())
+    user_id  = g.user.id
     page     = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 20, type=int), 100)
     filt     = request.args.get('filter', 'all')
@@ -264,7 +259,7 @@ def history():
     })
 
 @predictions_bp.route('/predict/history', methods=['DELETE'])
-@jwt_required()
+@clerk_required
 def clear_history():
     """Clear all prediction history for logged-in user.
     ---
@@ -273,7 +268,7 @@ def clear_history():
     responses:
       200: {description: History cleared successfully}
     """
-    user_id = int(get_jwt_identity())
+    user_id = g.user.id
     try:
         Prediction.query.filter_by(user_id=user_id).delete()
         db.session.commit()
@@ -284,7 +279,7 @@ def clear_history():
 
 
 @predictions_bp.route('/predict/csv', methods=['POST'])
-@jwt_required()
+@clerk_required
 def predict_csv():
     """Upload a CSV file for batch predictions. Returns results CSV.
     ---
@@ -297,7 +292,7 @@ def predict_csv():
     responses:
       200: {description: Predictions CSV file download}
     """
-    user_id = int(get_jwt_identity())
+    user_id = g.user.id
     if 'file' not in request.files:
         return jsonify({'error': 'No file — send as multipart/form-data key "file"'}), 400
 

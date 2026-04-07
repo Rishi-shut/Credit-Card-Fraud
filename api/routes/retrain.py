@@ -5,8 +5,8 @@ Accepts a labeled CSV (must have V1-V28, Amount, Class columns).
 import os, io
 import pandas as pd
 import joblib
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask import Blueprint, request, jsonify, g
+from api.auth import clerk_required
 from api.database import db
 from api.models import User
 
@@ -17,7 +17,7 @@ _MODEL_PATH = os.path.join(_BASE, 'models', 'xgboost.pkl')
 
 
 @retrain_bp.route('/retrain', methods=['POST'])
-@jwt_required()
+@clerk_required
 def retrain():
     """Retrain the XGBoost model with new labeled data (admin only).
     ---
@@ -35,7 +35,7 @@ def retrain():
       403: {description: Admin access required}
       400: {description: Invalid file}
     """
-    user = User.query.get(int(get_jwt_identity()))
+    user = g.user
     if not user or not user.is_admin:
         return jsonify({'error': 'Admin access required'}), 403
 
