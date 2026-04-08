@@ -484,21 +484,31 @@ function randomFeatures() {
 }
 
 function startFeed() {
+  if (feedInterval) stopFeed(); // Safety: clear any existing interval first
+
   document.getElementById('feedStartBtn').style.display = 'none';
   document.getElementById('feedStopBtn').style.display  = 'inline-flex';
 
   feedInterval = setInterval(async () => {
     const features = randomFeatures();
     feedCount++;
-    document.getElementById('feedCounter').textContent = `${feedCount} transactions processed`;
+    const currentNum = feedCount; // Capture local copy to prevent racing
+    document.getElementById('feedCounter').textContent = `${currentNum} transactions processed`;
 
     try {
       const res  = await fetch(`${API_BASE}/predict`, {
         method:'POST', headers: await authHeaders(), body:JSON.stringify({features})
       });
       const data = await res.json();
-      if (!data.error) appendFeedRow(data, features[28], feedCount);
-    } catch { appendFeedRow({prediction:Math.random()<0.1?1:0,prediction_label:Math.random()<0.1?'Fraud':'Legitimate',fraud_probability:Math.random()*0.3,confidence:0.8+Math.random()*0.2}, features[28], feedCount, true); }
+      if (!data.error) appendFeedRow(data, features[28], currentNum);
+    } catch { 
+      appendFeedRow({
+        prediction: Math.random() < 0.1 ? 1 : 0,
+        prediction_label: Math.random() < 0.1 ? 'Fraud' : 'Legitimate',
+        fraud_probability: Math.random() * 0.3,
+        confidence: 0.8 + Math.random() * 0.2
+      }, features[28], currentNum, true); 
+    }
   }, 2000);
 }
 

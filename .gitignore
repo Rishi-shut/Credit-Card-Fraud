@@ -56,6 +56,8 @@ creditcard.csv
 #docs
 /docs
 
+#temps
+/tmp
 # Database
 *.db
 *.sqlite

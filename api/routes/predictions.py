@@ -24,24 +24,41 @@ _SCALER  = os.path.join(_BASE, 'models', 'scaler.pkl')
 
 FEATURE_NAMES = [f'V{i}' for i in range(1, 29)] + ['Amount']
 
-# ── Lazy-load singletons ───────────────────────────────────────────
-_models    = {}
-_scaler    = None
+# ── Eager-load singletons (Prevention of first-request latency) ──────
+try:
+    _models = {
+        'xgboost':             joblib.load(_MODEL),
+        'random_forest':       joblib.load(os.path.join(_BASE, 'models', 'random_forest.pkl')),
+        'logistic_regression': joblib.load(os.path.join(_BASE, 'models', 'logistic_regression.pkl'))
+    }
+    _scaler = joblib.load(_SCALER)
+except Exception as e:
+    print(f"Error eager loading models: {e}")
+    _models = {}
+    _scaler = None
+
 _explainers = {}
+try:
+    import shap
+    if 'xgboost' in _models:       _explainers['xgboost']       = shap.TreeExplainer(_models['xgboost'])
+    if 'random_forest' in _models: _explainers['random_forest'] = shap.TreeExplainer(_models['random_forest'])
+except Exception as e:
+    print(f"Error eager loading SHAP explainers: {e}")
 
 def get_model(model_id='xgboost'):
     global _models
     if model_id not in _models:
         path = os.path.join(_BASE, 'models', f'{model_id}.pkl')
-        try: _models[model_id] = joblib.load(path)
-        except FileNotFoundError: return None
+        try:
+            _models[model_id] = joblib.load(path)
+        except Exception: return None
     return _models.get(model_id)
 
 def get_scaler():
     global _scaler
     if _scaler is None:
         try: _scaler = joblib.load(_SCALER)
-        except FileNotFoundError:
+        except Exception:
             from sklearn.preprocessing import StandardScaler
             _scaler = StandardScaler()
     return _scaler
@@ -52,10 +69,8 @@ def get_explainer(model, model_id):
         try:
             import shap
             if model_id == 'logistic_regression':
-                # Linear model needs different explainer or specific mask
                 _explainers[model_id] = shap.LinearExplainer(model, get_scaler().transform(np.zeros((1, 29))))
             else:
-                # Tree based models
                 _explainers[model_id] = shap.TreeExplainer(model)
         except Exception: return None
     return _explainers.get(model_id)
@@ -98,14 +113,34 @@ def make_prediction(features: list, model_id='xgboost') -> dict:
 
 # ── Helper: optional JWT user ──────────────────────────────────────
 def _optional_user_id():
+    """
+    Checks if a Clerk user is signed in. 
+    If they are, ensures they exist in our local database (sync) and returns their ID.
+    """
     try:
         from api.clerk_client import clerk_client
-        request_state = clerk_client.authenticate_request(request)
+        from clerk_backend_api.security import AuthenticateRequestOptions
+        
+        # We need to pass empty options or specific ones for basic auth check
+        request_state = clerk_client.authenticate_request(request, AuthenticateRequestOptions())
+        
         if request_state.is_signed_in:
             clerk_id = request_state.payload.get('sub')
+            
+            # Use a fresh query to ensure we're looking in the right scope
             user = User.query.filter_by(clerk_id=clerk_id).first()
+            
+            if not user:
+                # Pro-active sync: if user is logged in but not in our DB, create them.
+                # Use a default email if we can't fetch it easily here (auth_bp handles full sync)
+                email = request_state.payload.get('email', f'user_{clerk_id[:8]}@clerk.user')
+                user = User(clerk_id=clerk_id, email=email)
+                db.session.add(user)
+                db.session.commit()
+            
             return user.id if user else None
-    except Exception:
+    except Exception as e:
+        print(f"[PREDICT DEBUG] Optional user sync failed: {str(e)}")
         pass
     return None
 
