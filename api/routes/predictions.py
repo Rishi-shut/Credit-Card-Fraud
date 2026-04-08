@@ -38,6 +38,17 @@ def start_background_loading():
 
 def _load_models_task():
     global _models, _scaler, _explainers
+    import time
+    
+    # Force Matplotlib to non-interactive mode before importing SHAP
+    # This prevents the "Building font cache" hang on Render
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import os
+        os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'
+    except Exception: pass
+
     print("[INIT] Background Loading: Starting ML model pre-load...")
     try:
         _models['xgboost'] = joblib.load(_MODEL)
@@ -47,6 +58,9 @@ def _load_models_task():
         print("[INIT] Background Loading: Models loaded.")
     except Exception as e:
         print(f"[INIT] Background Loading Error (Models): {e}")
+
+    # Give the server a few seconds to breathe and respond to health checks
+    time.sleep(5)
 
     try:
         import shap
