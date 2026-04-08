@@ -18,7 +18,7 @@ from api.routes.predictions import predictions_bp
 from api.routes.shap_routes import shap_bp
 
 from api.routes.retrain import retrain_bp
-
+from api.routes.dev_access import dev_bp
 # ── Paths ──────────────────────────────────────────────────────────
 BASE_DIR     = os.path.dirname(os.path.dirname(__file__))
 # Check for .env in the /env folder as per project structure
@@ -97,41 +97,15 @@ def create_app():
     app.register_blueprint(predictions_bp)
     app.register_blueprint(shap_bp)
     app.register_blueprint(retrain_bp)
+    app.register_blueprint(dev_bp)
 
     # ── Custom Security Hooks ───────────────────────────────────
     @app.before_request
     def check_dev_access():
         if request.path.startswith('/apidocs'):
-            # Check for temporary access token in query params
-            token = request.args.get('token')
-            if token and token in DEV_ACCESS_TOKENS:
-                session['dev_auth'] = True
-                # Optional: prevent token reuse by deleting it
-                # del DEV_ACCESS_TOKENS[token]
-                return
-            
             if not session.get('dev_auth'):
+                # Redirect entirely from backend if session not set by auth check
                 return redirect(url_for('frontend') + '?dev_auth_required=1')
-
-    @app.route('/api/verify-dev-access', methods=['POST'])
-    def verify_dev_access():
-        data = request.get_json() or {}
-        code = data.get('code')
-        if not code:
-            return jsonify({'error': 'No secret code provided'}), 400
-        
-        # Compare with SECRET_KEY from .env
-        if code == app.config['SECRET_KEY']:
-            import uuid
-            token = str(uuid.uuid4())
-            DEV_ACCESS_TOKENS[token] = True
-            session['dev_auth'] = True
-            return jsonify({
-                'message': 'Access granted', 
-                'redirect': f'/apidocs?token={token}'
-            })
-        else:
-            return jsonify({'error': 'Invalid secret code'}), 401
 
     # ── Static / Frontend Routes ──────────────────────────────────
     @app.route('/')

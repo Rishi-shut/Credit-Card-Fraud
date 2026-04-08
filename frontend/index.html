@@ -40,14 +40,19 @@
 <!-- ═══════════════ NAVBAR ═══════════════ -->
 <nav class="navbar">
   <div class="container nav-inner">
-    <a class="nav-brand" href="#"><div class="logo-icon">🔐</div><span>FraudGuard</span></a>
+    <div class="nav-brand-container">
+      <a class="nav-brand" href="#"><div class="logo-icon">🔐</div><span>FraudGuard</span></a>
+    </div>
+
     <ul class="nav-links">
       <li><a href="#checker">Detection Suite</a></li>
       <li><a href="#models">Benchmarks</a></li>
       <li><a href="#gallery">Analytics</a></li>
       <li><a href="#history" id="historyNavLink" style="display:none">History</a></li>
       <li><a href="javascript:void(0)" onclick="openDevModal()">Developers</a></li>
+      <li><a href="javascript:void(0)" id="adminNavLink" style="display:none" onclick="openAdminModal()">⚙️ Admin Panel</a></li>
     </ul>
+
     <div class="nav-right">
       <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle dark/light mode">🌙</button>
       <div class="api-status-badge" id="apiStatusBadge">
@@ -55,7 +60,6 @@
         <span id="statusText">Checking…</span>
       </div>
       <!-- Auth buttons -->
-      <!-- Clerk Login -->
       <div id="clerk-login-area">
         <button class="btn btn-outline btn-sm" id="clerkSignInBtn">Login / Sign Up</button>
       </div>
@@ -384,18 +388,34 @@
 
 <!-- Developer Modal -->
 <div class="modal-overlay" id="devModal">
-  <div class="modal-box confirm-box">
+  <div class="modal-box confirm-box" id="devModalContent">
     <div class="confirm-icon">🛠️</div>
     <h2 class="modal-title">Developer Access</h2>
-    <p class="modal-subtitle">Enter administrative secret code to access API documentation.</p>
-    <div class="form-group mt-24">
-      <input type="password" id="devSecretCode" class="form-input" placeholder="••••••••" style="text-align:center; letter-spacing: 4px;">
-    </div>
-    <div class="confirm-actions mt-24">
+    <p class="modal-subtitle" id="devModalText">Checking your status...</p>
+    
+    <div class="confirm-actions mt-24" id="devModalActions">
       <button class="btn btn-outline btn-full" onclick="closeDevModal()">Cancel</button>
-      <button class="btn btn-primary btn-full" onclick="verifyDevCode()">Unlock Docs</button>
+      <button class="btn btn-primary btn-full" id="devRequestBtn" disabled>Loading...</button>
     </div>
     <div class="auth-error mt-12" id="devError" style="text-align:center"></div>
+  </div>
+</div>
+
+<!-- Admin Modal -->
+<div class="modal-overlay" id="adminModal">
+  <div class="modal-box" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2 class="modal-title" style="margin: 0; display:flex; align-items:center; gap:8px;">⚙️ Admin Panel <span class="section-tag" style="margin-left:auto; margin-bottom:0px; font-size: 0.75rem">Dev Requests</span></h2>
+      <button class="lightbox-close" style="position:static" onclick="closeAdminModal()">✕</button>
+    </div>
+    <div class="modal-body" style="max-height: 400px; overflow-y: auto;">
+      <p style="color:var(--text-color-light); margin-bottom: 16px; font-size:0.9rem">Manage users who have requested access to the Developer API documentation.</p>
+      
+      <div id="adminRequestsList" style="display:flex; flex-direction:column; gap:8px;">
+        <div style="text-align:center; padding: 20px; color: var(--text-color-light)">Loading requests...</div>
+      </div>
+      
+    </div>
   </div>
 </div>
 

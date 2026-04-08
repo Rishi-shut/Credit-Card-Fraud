@@ -55,3 +55,7 @@ creditcard.csv
 
 #docs
 /docs
+
+# Database
+*.db
+*.sqlite

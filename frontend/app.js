@@ -72,7 +72,7 @@ function openClerkSignIn() {
   if (window.Clerk) window.Clerk.openSignIn();
 }
 
-function updateAuthUI() {
+async function updateAuthUI() {
   const isLoggedIn = window.Clerk && !!window.Clerk.user;
   
   const loginArea = document.getElementById('clerk-login-area');
@@ -115,8 +115,25 @@ function updateAuthUI() {
   });
 
   if (window.Clerk && window.Clerk.user) {
-    // Optional: add custom logic for user appearance if needed
+    const isAdmin = window.Clerk.user.publicMetadata?.is_admin;
+    if (isAdmin) {
+      document.getElementById('adminNavLink').style.display = 'inline-block';
+    } else {
+      fetch(`${API_BASE}/api/dev/status`, { headers: await authHeaders() })
+        .then(r => r.json())
+        .then(data => {
+           if (data.is_admin) document.getElementById('adminNavLink').style.display = 'inline-block';
+           else document.getElementById('adminNavLink').style.display = 'none';
+        })
+        .catch(() => {
+           document.getElementById('adminNavLink').style.display = 'none';
+        });
+    }
+  } else {
+    const adminLink = document.getElementById('adminNavLink');
+    if (adminLink) adminLink.style.display = 'none';
   }
+
   if (isLoggedIn) loadHistory('all');
 }
 
@@ -687,46 +704,164 @@ document.addEventListener('keydown', e => {
   });
 
 // ── Developer Mode ────────────────────────────────────────────────
-function openDevModal() {
-  document.getElementById('devModal').classList.add('open');
-  document.getElementById('devSecretCode').value = '';
+async function openDevModal() {
+  const modal = document.getElementById('devModal');
+  const btn = document.getElementById('devRequestBtn');
+  const text = document.getElementById('devModalText');
   document.getElementById('devError').textContent = '';
-  document.getElementById('devSecretCode').focus();
+  modal.classList.add('open');
+
+  if (!window.Clerk || !window.Clerk.user) {
+    text.textContent = 'You must be logged in to request developer access.';
+    btn.disabled = false;
+    btn.textContent = 'Log In First';
+    btn.onclick = openClerkSignIn;
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Checking Status...';
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/dev/status`, { headers: await authHeaders() });
+    if (!res.ok) throw new Error('Status fetch failed');
+    const data = await res.json();
+    
+    // Auto unhide admin if data says so
+    if (data.is_admin) document.getElementById('adminNavLink').style.display = 'inline-block';
+
+    if (data.dev_status === 'approved' || data.is_admin) {
+      text.innerHTML = '<span class="text-green">Access Approved.</span> You can now view the documentation.';
+      btn.disabled = false;
+      btn.textContent = 'Open Documentation';
+      btn.onclick = enterDevMode;
+    } else if (data.dev_status === 'pending') {
+      text.innerHTML = 'Your request is <span class="text-gold">Pending Approval</span>.';
+      btn.disabled = true;
+      btn.textContent = 'Request Pending...';
+    } else {
+      text.textContent = data.dev_status === 'rejected' ? 'Your previous request was rejected. You may apply again.' : 'Apply for developer API access.';
+      btn.disabled = false;
+      btn.textContent = 'Request Access';
+      btn.onclick = requestDevAccess;
+    }
+  } catch (err) {
+    text.textContent = 'Failed to load status.';
+    btn.disabled = true;
+    btn.textContent = 'Error';
+  }
 }
 
 function closeDevModal() {
   document.getElementById('devModal').classList.remove('open');
 }
 
-async function verifyDevCode() {
-  const code = document.getElementById('devSecretCode').value;
-  const err  = document.getElementById('devError');
-  const btn  = document.querySelector('#devModal .btn-primary');
-  
+async function requestDevAccess() {
+  const btn = document.getElementById('devRequestBtn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
   try {
-    btn.disabled = true;
-    btn.textContent = 'Verifying...';
-    
-    const res = await fetch(`${API_BASE}/api/verify-dev-access`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code })
-    });
-    
-    const data = await res.json();
-    
+    const res = await fetch(`${API_BASE}/api/dev/request`, { method: 'POST', headers: await authHeaders() });
     if (res.ok) {
-        showToast('Developer access granted', 'green');
-        closeDevModal();
-        window.open(data.redirect, '_blank');
+      showToast('Developer access requested!', 'green');
+      openDevModal(); // refresh
     } else {
-        err.textContent = data.error || 'Access denied';
-        document.getElementById('devSecretCode').value = '';
+      showToast('Failed to request access', 'red');
+      btn.disabled = false;
+      btn.textContent = 'Request Access';
     }
-  } catch (err) {
-    err.textContent = 'Server connection failed';
-  } finally {
+  } catch(e) {
     btn.disabled = false;
-    btn.textContent = 'Unlock Docs';
+    btn.textContent = 'Request Access';
   }
 }
+
+async function enterDevMode() {
+  const btn = document.getElementById('devRequestBtn');
+  btn.disabled = true;
+  btn.textContent = 'Generating Session...';
+  try {
+    const res = await fetch(`${API_BASE}/api/dev/generate-session`, { method: 'POST', headers: await authHeaders() });
+    if (res.ok) {
+      closeDevModal();
+      window.open('/apidocs', '_blank');
+    } else {
+      document.getElementById('devError').textContent = 'Unauthorized';
+    }
+  } catch(e) {
+    document.getElementById('devError').textContent = 'Cannot connect';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Open Documentation';
+  }
+}
+
+// ── Admin Mode ───────────────────────────────────────────────────
+function closeAdminModal() {
+  document.getElementById('adminModal').classList.remove('open');
+}
+
+async function openAdminModal() {
+  document.getElementById('adminModal').classList.add('open');
+  const list = document.getElementById('adminRequestsList');
+  list.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-color-light)">Loading management console...</div>';
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/dev/admin/requests`, { headers: await authHeaders() });
+    if (!res.ok) throw new Error('Unauthorized');
+    const users = await res.json();
+    
+    const pending = users.filter(u => u.dev_status === 'pending');
+    const approved = users.filter(u => u.dev_status === 'approved');
+    
+    let html = '';
+
+    // Section 1: Pending Requests
+    html += `<h4 style="margin: 0 0 12px 0; color:var(--text-primary); font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">⏳ Pending Requests (${pending.length})</h4>`;
+    if (pending.length === 0) {
+      html += '<div style="text-align:center; padding:12px; color:var(--text-muted); font-size:13px; border: 1px dashed var(--border-color); border-radius:12px; margin-bottom:24px;">No pending requests.</div>';
+    } else {
+      html += '<div style="display:flex; flex-direction:column; gap:10px; margin-bottom:24px;">' + pending.map(u => `
+        <div style="background:var(--bg-layer-2); padding:14px; border-radius:12px; display:flex; justify-content:space-between; align-items:center; border: 1px solid var(--border-color);">
+          <div><strong style="color:white; display:block; font-size:14px;">${u.email}</strong><span style="font-size:11px; color:var(--text-muted)">Requested: ${new Date(u.created_at).toLocaleDateString()}</span></div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-sm btn-outline" style="border-color:var(--accent-red); color:var(--accent-red); padding: 4px 10px; font-size:11px;" onclick="manageDevReq(${u.id}, 'reject')">Reject</button>
+            <button class="btn btn-sm" style="background:var(--accent-green); color:black; padding: 4px 10px; font-size:11px;" onclick="manageDevReq(${u.id}, 'approve')">Approve</button>
+          </div>
+        </div>
+      `).join('') + '</div>';
+    }
+
+    // Section 2: Active Developers
+    html += `<h4 style="margin: 0 0 12px 0; color:var(--text-primary); font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">🚀 Active Developers (${approved.length})</h4>`;
+    if (approved.length === 0) {
+      html += '<div style="text-align:center; padding:12px; color:var(--text-muted); font-size:13px; border: 1px dashed var(--border-color); border-radius:12px;">No active developers.</div>';
+    } else {
+      html += '<div style="display:flex; flex-direction:column; gap:10px;">' + approved.map(u => `
+        <div style="background:var(--bg-layer-3); padding:14px; border-radius:12px; display:flex; justify-content:space-between; align-items:center; border: 1px solid var(--accent-green-low);">
+          <div><strong style="color:white; display:block; font-size:14px;">${u.email}</strong><span style="font-size:11px; color:var(--text-muted)">Approved on: ${new Date(u.created_at).toLocaleDateString()}</span></div>
+          <button class="btn btn-sm btn-outline" style="border-color:var(--accent-red); color:var(--accent-red); padding: 4px 10px; font-size:11px;" onclick="manageDevReq(${u.id}, 'revoke')">Revoke Access</button>
+        </div>
+      `).join('') + '</div>';
+    }
+    
+    list.innerHTML = html;
+  } catch(e) {
+    list.innerHTML = '<div style="text-align:center; padding:20px; color:var(--accent-red)">Unauthorized or failed to load management console.</div>';
+  }
+}
+
+async function manageDevReq(userId, action) {
+  try {
+    const res = await fetch(`${API_BASE}/api/dev/admin/requests/${userId}/${action}`, { method: 'POST', headers: await authHeaders() });
+    if (res.ok) {
+      showToast('Updated successfully', 'green');
+      openAdminModal();
+    } else {
+      showToast('Update failed', 'red');
+    }
+  } catch(e) {
+    showToast('Network error', 'red');
+  }
+}
+

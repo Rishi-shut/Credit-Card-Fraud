@@ -14,6 +14,7 @@ class User(db.Model):
     email         = db.Column(db.String(120), unique=True, nullable=False, index=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     is_admin      = db.Column(db.Boolean, default=False)
+    dev_status    = db.Column(db.String(20), default='none') # none | pending | approved | rejected
 
 
     predictions = db.relationship(
@@ -26,6 +27,7 @@ class User(db.Model):
             'email':            self.email,
             'created_at':       self.created_at.isoformat(),
             'is_admin':         self.is_admin,
+            'dev_status':       self.dev_status,
         }
 
 
