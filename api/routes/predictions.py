@@ -24,26 +24,39 @@ _SCALER  = os.path.join(_BASE, 'models', 'scaler.pkl')
 
 FEATURE_NAMES = [f'V{i}' for i in range(1, 29)] + ['Amount']
 
-# ── Eager-load singletons (Prevention of first-request latency) ──────
-try:
-    _models = {
-        'xgboost':             joblib.load(_MODEL),
-        'random_forest':       joblib.load(os.path.join(_BASE, 'models', 'random_forest.pkl')),
-        'logistic_regression': joblib.load(os.path.join(_BASE, 'models', 'logistic_regression.pkl'))
-    }
-    _scaler = joblib.load(_SCALER)
-except Exception as e:
-    print(f"Error eager loading models: {e}")
-    _models = {}
-    _scaler = None
-
+# ── Background Loading (Prevents Render Deployment Timeouts) ──────
+_models = {}
+_scaler = None
 _explainers = {}
-try:
-    import shap
-    if 'xgboost' in _models:       _explainers['xgboost']       = shap.TreeExplainer(_models['xgboost'])
-    if 'random_forest' in _models: _explainers['random_forest'] = shap.TreeExplainer(_models['random_forest'])
-except Exception as e:
-    print(f"Error eager loading SHAP explainers: {e}")
+
+def start_background_loading():
+    """Triggers the heavy ML loading in a separate thread."""
+    import threading
+    thread = threading.Thread(target=_load_models_task)
+    thread.daemon = True
+    thread.start()
+
+def _load_models_task():
+    global _models, _scaler, _explainers
+    print("[INIT] Background Loading: Starting ML model pre-load...")
+    try:
+        _models['xgboost'] = joblib.load(_MODEL)
+        _models['random_forest'] = joblib.load(os.path.join(_BASE, 'models', 'random_forest.pkl'))
+        _models['logistic_regression'] = joblib.load(os.path.join(_BASE, 'models', 'logistic_regression.pkl'))
+        _scaler = joblib.load(_SCALER)
+        print("[INIT] Background Loading: Models loaded.")
+    except Exception as e:
+        print(f"[INIT] Background Loading Error (Models): {e}")
+
+    try:
+        import shap
+        if 'xgboost' in _models:
+            _explainers['xgboost'] = shap.TreeExplainer(_models['xgboost'])
+        if 'random_forest' in _models:
+            _explainers['random_forest'] = shap.TreeExplainer(_models['random_forest'])
+        print("[INIT] Background Loading: SHAP explainers initialized.")
+    except Exception as e:
+        print(f"[INIT] Background Loading Error (SHAP): {e}")
 
 def get_model(model_id='xgboost'):
     global _models

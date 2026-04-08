@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 
 from api.database import db
 from api.auth import auth_bp
-from api.routes.predictions import predictions_bp
+from api.routes.predictions import predictions_bp, start_background_loading
 from api.routes.shap_routes import shap_bp
 
 from api.routes.retrain import retrain_bp
@@ -189,6 +189,9 @@ def create_app():
     # Exempt monitoring endpoints from rate limiting
     limiter.exempt(health)
     limiter.exempt(stats)
+
+    # Start ML model loading in background thread (Prevents Render timeout)
+    start_background_loading()
 
     return app
 
