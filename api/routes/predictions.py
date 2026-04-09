@@ -37,40 +37,18 @@ def start_background_loading():
     thread.start()
 
 def _load_models_task():
-    global _models, _scaler, _explainers
+    global _models, _scaler
     import time
-    
-    # Force Matplotlib to non-interactive mode before importing SHAP
-    # This prevents the "Building font cache" hang on Render
-    try:
-        import matplotlib
-        matplotlib.use('Agg')
-        import os
-        os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'
-    except Exception: pass
 
     print("[INIT] Background Loading: Starting ML model pre-load...")
     try:
-        _models['xgboost'] = joblib.load(_MODEL)
-        _models['random_forest'] = joblib.load(os.path.join(_BASE, 'models', 'random_forest.pkl'))
+        _models['xgboost']             = joblib.load(_MODEL)
+        _models['random_forest']       = joblib.load(os.path.join(_BASE, 'models', 'random_forest.pkl'))
         _models['logistic_regression'] = joblib.load(os.path.join(_BASE, 'models', 'logistic_regression.pkl'))
         _scaler = joblib.load(_SCALER)
-        print("[INIT] Background Loading: Models loaded.")
+        print("[INIT] Background Loading: Models loaded successfully.")
     except Exception as e:
         print(f"[INIT] Background Loading Error (Models): {e}")
-
-    # Give the server a few seconds to breathe and respond to health checks
-    time.sleep(5)
-
-    try:
-        import shap
-        if 'xgboost' in _models:
-            _explainers['xgboost'] = shap.TreeExplainer(_models['xgboost'])
-        if 'random_forest' in _models:
-            _explainers['random_forest'] = shap.TreeExplainer(_models['random_forest'])
-        print("[INIT] Background Loading: SHAP explainers initialized.")
-    except Exception as e:
-        print(f"[INIT] Background Loading Error (SHAP): {e}")
 
 def get_model(model_id='xgboost'):
     global _models
@@ -91,16 +69,9 @@ def get_scaler():
     return _scaler
 
 def get_explainer(model, model_id):
-    global _explainers
-    if model_id not in _explainers:
-        try:
-            import shap
-            if model_id == 'logistic_regression':
-                _explainers[model_id] = shap.LinearExplainer(model, get_scaler().transform(np.zeros((1, 29))))
-            else:
-                _explainers[model_id] = shap.TreeExplainer(model)
-        except Exception: return None
-    return _explainers.get(model_id)
+    # SHAP disabled on free tier to stay within 512MB RAM limit.
+    # Re-enable when on a paid plan with >1GB RAM.
+    return None
 
 # ── Core prediction logic ──────────────────────────────────────────
 def make_prediction(features: list, model_id='xgboost') -> dict:
@@ -116,17 +87,8 @@ def make_prediction(features: list, model_id='xgboost') -> dict:
     pred  = int(model.predict(arr)[0])
     proba = model.predict_proba(arr)[0]
 
-    # SHAP values (best-effort)
+    # SHAP disabled on free tier (saves ~200MB RAM)
     shap_dict = None
-    try:
-        exp = get_explainer(model, model_id)
-        if exp:
-            sv = exp.shap_values(arr)
-            # Handle list output for some models
-            if isinstance(sv, list): sv = sv[1] if len(sv) > 1 else sv[0]
-            if len(sv.shape) > 1: sv = sv[0]
-            shap_dict = {FEATURE_NAMES[i]: float(sv[i]) for i in range(len(FEATURE_NAMES))}
-    except Exception: pass
 
     return {
         'prediction':             pred,
