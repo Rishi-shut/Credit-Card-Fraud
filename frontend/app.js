@@ -24,12 +24,12 @@ const SAMPLES = {
 };
 
 const GALLERY_ITEMS = [
-  { file:'confusion_matrix.png',   label:'Confusion Matrix',    caption:'TP/FP/FN/TN breakdown' },
-  { file:'roc_curves.png',         label:'ROC Curves',          caption:'All 3 models compared' },
-  { file:'feature_analysis.png',   label:'Feature Analysis',    caption:'Importance & distribution' },
-  { file:'amount_analysis.png',    label:'Amount Distribution', caption:'Fraud vs legitimate amounts' },
-  { file:'correlation_matrix.png', label:'Correlation Matrix',  caption:'Feature correlations heatmap' },
-  { file:'boxplots.png',           label:'Feature Boxplots',    caption:'Top 8 features by class' },
+  { url:'https://ik.imagekit.io/xqdg6zpy8/results/confusion_matrix.png',   label:'Confusion Matrix',    caption:'TP/FP/FN/TN breakdown' },
+  { url:'https://ik.imagekit.io/xqdg6zpy8/results/roc_curves.png',         label:'ROC Curves',          caption:'All 3 models compared' },
+  { url:'https://ik.imagekit.io/xqdg6zpy8/results/feature_analysis.png',   label:'Feature Analysis',    caption:'Importance & distribution' },
+  { url:'https://ik.imagekit.io/xqdg6zpy8/results/amount_analysis.png',    label:'Amount Distribution', caption:'Fraud vs legitimate amounts' },
+  { url:'https://ik.imagekit.io/xqdg6zpy8/results/correlation_matrix.png', label:'Correlation Matrix',  caption:'Feature correlations heatmap' },
+  { url:'https://ik.imagekit.io/xqdg6zpy8/results/boxplots.png',           label:'Feature Boxplots',    caption:'Top 8 features by class' },
 ];
 
 const FEATURE_INSIGHTS = [
@@ -194,8 +194,8 @@ function setupReveal() {
 // ── Gallery ───────────────────────────────────────────────────────
 function buildGallery() {
   document.getElementById('galleryGrid').innerHTML = GALLERY_ITEMS.map(item => `
-    <div class="gallery-item reveal" onclick="openLightbox('${API_BASE}/results/${item.file}','${item.label}')">
-      <img src="${API_BASE}/results/${item.file}" alt="${item.label}" onerror="this.parentElement.style.display='none'" />
+    <div class="gallery-item reveal" onclick="openLightbox('${item.url}','${item.label}')">
+      <img src="${item.url}" alt="${item.label}" onerror="this.parentElement.style.display='none'" />
       <div class="gallery-overlay"><span>🔍 View Full Size</span></div>
       <div class="gallery-caption">${item.label} <span class="text-muted">— ${item.caption}</span></div>
     </div>
