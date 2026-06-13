@@ -14,13 +14,18 @@ let feedInterval = null;
 let feedCount    = 0;
 let csvFile      = null;
 let currentModel = 'xgboost';
+let liveAlertsCount = 0;
+let livePeakRisk = 0.0;
+let liveAmounts = [];
 
 const featureNames = [...Array.from({length: 28}, (_, i) => `V${i+1}`), 'Amount'];
 
 // ── Sample Data ───────────────────────────────────────────────────
 const SAMPLES = {
-  fraud: { V14:-9.5, V10:-7.8, V4:-2.1, V12:-9.2, V17:-8.4, Amount:329.0, label:'🚨 Known Fraud Pattern' },
-  legit: { V14:0.61, V10:0.34, V4:1.22, V12:0.15, V17:-0.14, Amount:45.0, label:'✅ Typical Legitimate Transaction' },
+  grocery: { V14: 0.61, V10: 0.34, V4: 1.22, V12: 0.15, V17: -0.14, Amount: 1845.0, label: 'Typical Local Grocery Purchase' },
+  luxury:  { V14: 0.82, V10: 0.51, V4: -0.21, V12: 0.94, V17: 0.12, Amount: 145000.0, label: 'Legitimate High-Value Luxury Spending' },
+  theft:   { V14: -9.5, V10: -7.8, V4: 4.2,  V12: -9.2, V17: -8.4, Amount: 24900.0, label: 'Suspected Physical Card Theft' },
+  probe:   { V14: -8.1, V10: -6.5, V4: 3.5,  V12: -7.0, V17: -5.5, Amount: 85.0,   label: 'Anomalous Micro-Transaction Probe' }
 };
 
 const GALLERY_ITEMS = [
@@ -62,7 +67,7 @@ function toggleTheme() {
 }
 
 function initTheme() {
-  const saved = localStorage.getItem('fg_theme') || 'dark';
+  const saved = localStorage.getItem('fg_theme') || 'light';
   document.documentElement.setAttribute('data-theme', saved);
   document.getElementById('themeToggle').textContent = saved === 'dark' ? '🌙' : '☀️';
 }
@@ -245,11 +250,13 @@ function setRangeValue(id, value) {
 }
 function loadSample(type) {
   const s = SAMPLES[type];
+  if (!s) return;
   setRangeValue('V14', s.V14); setRangeValue('V10', s.V10); setRangeValue('V4', s.V4);
   document.getElementById('V12').value = s.V12;
   document.getElementById('V17').value = s.V17;
   document.getElementById('Amount').value = s.Amount;
-  showToast(`Loaded: ${s.label}`, type === 'fraud' ? 'red' : 'green');
+  const isFraud = (type === 'theft' || type === 'probe');
+  showToast(`Loaded: ${s.label}`, isFraud ? 'red' : 'green');
 }
 function clearForm() {
   ['V14','V10','V4'].forEach(id => setRangeValue(id, 0));
@@ -439,6 +446,30 @@ function clearCsv() {
   document.getElementById('csvResult').textContent = '';
 }
 
+function downloadTestCsvTemplate(e) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  const headers = [...Array.from({length: 28}, (_, i) => `V${i+1}`), 'Amount'];
+  const rows = [
+    // Row 1: Legit Grocery
+    [0.61,0.1,0.2,1.22,0.3,-0.1,0.05,0.1,0.2,0.34,0.12,0.15,0.01,0.01,-0.1,-0.14,0.1,0.2,-0.1,0,0,0,0,0,0,0,0,0,1845.0],
+    // Row 2: Fraud Theft
+    [-9.5,0.2,-1.5,4.2,-2.1,0.5,-0.8,-0.2,0.6,-7.8,1.2,-9.2,0.3,-0.4,-0.1,-8.4,0.5,-0.2,0.3,0,0,0,0,0,0,0,0,0,24900.0],
+    // Row 3: Legit High-Value
+    [0.82,0.05,0.1,-0.21,0.1,-0.05,0.02,0.05,0.1,0.51,0.08,0.94,-0.02,0.01,0.05,0.12,-0.05,0.1,-0.02,0,0,0,0,0,0,0,0,0,145000.0]
+  ];
+  let csvContent = "data:text/csv;charset=utf-8," 
+    + headers.join(",") + "\n"
+    + rows.map(r => r.join(",")).join("\n");
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", "fraud_test_template.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast("Test CSV template downloaded!", "green");
+}
+
 async function uploadCsv() {
   if (!csvFile || !window.Clerk || !window.Clerk.user) return;
   const btn = document.getElementById('csvUploadBtn');
@@ -489,6 +520,17 @@ function startFeed() {
   document.getElementById('feedStartBtn').style.display = 'none';
   document.getElementById('feedStopBtn').style.display  = 'inline-flex';
 
+  // Reset live telemetry stats
+  liveAlertsCount = 0;
+  livePeakRisk = 0.0;
+  liveAmounts = [];
+  const alertsEl = document.getElementById('liveFeedAlerts');
+  const peakEl = document.getElementById('liveFeedPeakRisk');
+  const avgEl = document.getElementById('liveFeedAvgAmount');
+  if (alertsEl) alertsEl.textContent = '0';
+  if (peakEl) peakEl.textContent = '0.0%';
+  if (avgEl) avgEl.textContent = '₹0.00';
+
   feedInterval = setInterval(async () => {
     const features = randomFeatures();
     feedCount++;
@@ -524,11 +566,31 @@ function appendFeedRow(data, amount, num, demo = false) {
   const label   = demo ? data.prediction_label + ' [DEMO]' : data.prediction_label;
   const now     = new Date().toLocaleTimeString();
 
+  // Telemetry updates
+  if (isFraud) {
+    liveAlertsCount++;
+    const alertsEl = document.getElementById('liveFeedAlerts');
+    if (alertsEl) alertsEl.textContent = liveAlertsCount;
+  }
+  
+  const riskVal = parseFloat(data.fraud_probability || 0);
+  if (riskVal > livePeakRisk) {
+    livePeakRisk = riskVal;
+    const peakEl = document.getElementById('liveFeedPeakRisk');
+    if (peakEl) peakEl.textContent = `${(livePeakRisk * 100).toFixed(1)}%`;
+  }
+
+  liveAmounts.push(parseFloat(amount));
+  if (liveAmounts.length > 10) liveAmounts.shift();
+  const avgAmt = liveAmounts.reduce((a, b) => a + b, 0) / liveAmounts.length;
+  const avgEl = document.getElementById('liveFeedAvgAmount');
+  if (avgEl) avgEl.textContent = `₹${avgAmt.toFixed(2)}`;
+
   const tr = document.createElement('tr');
   if (isFraud) tr.className = 'feed-fraud';
   tr.innerHTML = `
     <td>${num}</td>
-    <td>$${parseFloat(amount).toFixed(2)}</td>
+    <td>₹${parseFloat(amount).toFixed(2)}</td>
     <td><span class="badge ${isFraud?'badge-fraud':'badge-legit'}">${label}</span></td>
     <td class="${isFraud?'text-red':'text-green'}">${((data.fraud_probability||0)*100).toFixed(1)}%</td>
     <td>${((data.confidence||0)*100).toFixed(1)}%</td>
@@ -566,7 +628,7 @@ async function loadHistory(filter = 'all') {
         <td><span class="badge ${isFraud?'badge-fraud':'badge-legit'}">${p.prediction_label}</span></td>
         <td class="${isFraud?'text-red':'text-green'}">${(p.fraud_probability*100).toFixed(1)}%</td>
         <td>${(p.confidence*100).toFixed(1)}%</td>
-        <td class="text-muted" style="font-size:11px">${p.amount ? '$'+p.amount.toFixed(2) : '—'}</td>
+        <td class="text-muted" style="font-size:11px">${p.amount ? '₹'+p.amount.toFixed(2) : '—'}</td>
         <td><span class="badge" style="background:rgba(255,255,255,0.06);color:var(--text-muted)">${p.source}</span></td>
       </tr>`;
     }).join('');
