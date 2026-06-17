@@ -46,13 +46,13 @@
       </a>
     </div>
 
-    <ul class="nav-links">
-      <li><a href="#checker">Analysis</a></li>
-      <li><a href="#models">Benchmarks</a></li>
-      <li><a href="#gallery">Analytics</a></li>
-      <li><a href="#history" id="historyNavLink" style="display:none">History</a></li>
-      <li><a href="javascript:void(0)" onclick="openDevModal()">Developer Docs</a></li>
-      <li><a href="javascript:void(0)" id="adminNavLink" style="display:none" onclick="openAdminModal()">Admin Access</a></li>
+    <ul class="nav-links" id="navLinks">
+      <li id="analysisNavLi"><a href="#checker" onclick="document.getElementById('navLinks').classList.remove('open')">Analysis</a></li>
+      <li><a href="#models" onclick="document.getElementById('navLinks').classList.remove('open')">Benchmarks</a></li>
+      <li><a href="#gallery" onclick="document.getElementById('navLinks').classList.remove('open')">Analytics</a></li>
+      <li><a href="#history" id="historyNavLink" style="display:none" onclick="document.getElementById('navLinks').classList.remove('open')">History</a></li>
+      <li><a href="javascript:void(0)" onclick="openDevModal(); document.getElementById('navLinks').classList.remove('open');">Developer Docs</a></li>
+      <li><a href="javascript:void(0)" id="adminNavLink" style="display:none" onclick="openAdminModal(); document.getElementById('navLinks').classList.remove('open');">Admin Access</a></li>
     </ul>
 
     <div class="nav-right">
@@ -66,6 +66,11 @@
         <button class="btn btn-outline btn-sm" id="clerkSignInBtn">Sign In</button>
       </div>
       <div id="clerk-user-button"></div>
+      
+      <!-- Mobile Menu Button -->
+      <button class="theme-toggle menu-toggle-btn" id="menuToggleBtn" onclick="document.getElementById('navLinks').classList.toggle('open')" title="Toggle Menu" style="display: none;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+      </button>
     </div>
   </div>
 </nav>
@@ -78,7 +83,8 @@
     <h1 class="hero-title">Predict and Prevent<br><span class="highlight">Credit Card Fraud</span></h1>
     <p class="hero-subtitle">Real-time transaction analysis powered by state-of-the-art machine learning models. Built to detect malicious activity instantly and explain decision reasoning.</p>
     <div class="hero-cta">
-      <a href="#checker" class="btn btn-primary">Analyze Transaction</a>
+      <a href="#checker" class="btn btn-primary show-desktop">Analyze Transaction</a>
+      <a href="#livefeed" class="btn btn-primary show-mobile">Analyze Transaction</a>
       <a href="#models" class="btn btn-outline">View Model Benchmarks</a>
       <a href="/apidocs" target="_blank" class="btn btn-outline">API Reference</a>
     </div>
