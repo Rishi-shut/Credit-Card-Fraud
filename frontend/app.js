@@ -331,6 +331,16 @@ function renderPredictionResult(data) {
   document.getElementById('legitPct').textContent    = `${legitPct}%`;
   document.getElementById('statConfidence').textContent = `${conf}%`;
   document.getElementById('statFraudProb').textContent  = `${fraudPct}%`;
+
+  // Auto scroll to results on mobile/tablet viewports (below 960px)
+  if (window.innerWidth <= 960) {
+    const resultBox = document.getElementById('resultVerdict');
+    if (resultBox) {
+      setTimeout(() => {
+        resultBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 150);
+    }
+  }
 }
 
 function renderShap(shapValues) {
